@@ -172,8 +172,7 @@ function renderData(data) {
       }
 
       function sendWhatsApp() {
-        var message = "??? *??? ???? - Aleppo Delivery*\n";
-        message += "--------------------------\n";
+        var message = "";
         
         var cartData = {}; 
         var prices = {};
@@ -201,8 +200,8 @@ function renderData(data) {
           message += `   ${q} � ${p.toLocaleString()} = ${sub.toLocaleString()} ?.?\n`;
         }
 
-        message += "--------------------------\n";
-        message += `?? *???????? ???????: ${document.getElementById('grand-total').innerText} ?.?*`;
+       message += "--------------------------\n";
+        message += `💰 *الإجمالي النهائي: ${document.getElementById('grand-total').innerText} ل.س*`;
         
         window.open("https://wa.me/" + targetNumber + "?text=" + encodeURIComponent(message));
       }
