@@ -1,11 +1,9 @@
 <!DOCTYPE html>
 <html lang="ar">
 <head>
-    <base target="_top">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    
     <title>Rogven</title>
 
     <style>
@@ -103,6 +101,9 @@
       .container { padding: 15px; max-width: 800px; margin: auto; }
       .category-header { font-size: 20px; font-weight: 800; margin: 25px 0 15px; padding-right: 12px; border-right: 5px solid var(--primary); }
 
+      /* --- Loading Spinner --- */
+      .loader { text-align: center; padding: 50px 20px; font-size: 18px; color: var(--text-muted); }
+
       /* --- Hero View --- */
       .product-container.hero-view .product-card {
         display: block;
@@ -117,41 +118,17 @@
       .product-container.hero-view .product-image {
         width: 100%;
         height: auto; 
-        max-height: 65vh; 
+        max-height: 45vh; 
         object-fit: contain; 
         background: #f9f9f9;
       }
-      .product-container.hero-view .product-info {
-        padding: 20px;
-      }
-      .product-container.hero-view .product-name { 
-        font-size: 22px; 
-        margin-bottom: 10px;
-        font-weight: 800;
-      }
-      .product-container.hero-view .product-price {
-        font-size: 18px;
-        margin-bottom: 15px;
-        display: block;
-      }
-      .product-container.hero-view .item-subtotal {
-        font-size: 14px;
-        margin-top: 10px;
-        color: var(--text-muted);
-      }
-      .product-container.hero-view .quantity-controls {
-        justify-content: center;
-        gap: 20px;
-      }
-      .product-container.hero-view .btn-qty {
-        width: 50px;
-        height: 50px;
-        font-size: 24px;
-      }
-      .product-container.hero-view .qty-input {
-        font-size: 22px;
-        width: 50px;
-      }
+      .product-container.hero-view .product-info { padding: 20px; }
+      .product-container.hero-view .product-name { font-size: 22px; margin-bottom: 10px; font-weight: 800; }
+      .product-container.hero-view .product-price { font-size: 18px; margin-bottom: 15px; display: block; }
+      .product-container.hero-view .item-subtotal { font-size: 14px; margin-top: 10px; color: var(--text-muted); }
+      .product-container.hero-view .quantity-controls { justify-content: center; gap: 20px; }
+      .product-container.hero-view .btn-qty { width: 50px; height: 50px; font-size: 24px; }
+      .product-container.hero-view .qty-input { font-size: 22px; width: 50px; }
 
       /* --- List View --- */
       .product-container.list-view .product-card {
@@ -164,38 +141,12 @@
         box-shadow: var(--shadow);
         border: 1px solid var(--border-color);
       }
-      .product-container.list-view .product-image {
-        width: 90px; 
-        height: 90px;
-        border-radius: 12px;
-        object-fit: cover;
-        margin-left: 15px;
-      }
-      .product-container.list-view .product-info {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-      }
-      .product-container.list-view .product-name {
-        font-size: 16px;
-        margin-bottom: 5px;
-      }
-      .product-container.list-view .item-subtotal {
-        font-size: 12px;
-        color: var(--text-muted);
-        margin-top: 2px;
-      }
-      .product-container.list-view .quantity-controls {
-        margin-top: 5px;
-        justify-content: flex-start;
-        gap: 10px;
-      }
-      .product-container.list-view .btn-qty {
-        width: 32px;
-        height: 32px;
-        font-size: 18px;
-      }
+      .product-container.list-view .product-image { width: 90px; height: 90px; border-radius: 12px; object-fit: cover; margin-left: 15px; }
+      .product-container.list-view .product-info { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+      .product-container.list-view .product-name { font-size: 16px; margin-bottom: 5px; }
+      .product-container.list-view .item-subtotal { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+      .product-container.list-view .quantity-controls { margin-top: 5px; justify-content: flex-start; gap: 10px; }
+      .product-container.list-view .btn-qty { width: 32px; height: 32px; font-size: 18px; }
 
       .product-name { font-weight: 700; }
       .product-price { color: var(--primary); font-weight: 800; }
@@ -225,33 +176,10 @@
 
     <div class="chips-wrapper" id="category-chips">
         <div class="chip active" onclick="scrollToCategory('all', this)">الكل</div>
-        <? for (var category in data) { ?>
-          <div class="chip" onclick="scrollToCategory('<?= category ?>', this)"><?= category ?></div>
-        <? } ?>
     </div>
     
     <div class="container product-container hero-view" id="main-container">
-      <? for (var category in data) { ?>
-        <div class="category-section" id="section-<?= category ?>">
-          <div class="category-header"><?= category ?></div>
-          <? for (var i = 0; i < data[category].length; i++) { 
-             var item = data[category][i]; ?>
-            <div class="product-card" data-name="<?= item.name ?>" data-price="<?= item.price ?>" data-stock="<?= item.stock ?>">
-              <img class="product-image" src="<?= item.imageUrl ?>" onerror="this.src='https://via.placeholder.com/600x400?text=Aleppo+Delivery'">
-              <div class="product-info">
-                <div class="product-name"><?= item.name ?></div>
-                <div class="product-price"><?= item.price.toLocaleString() ?> ل.س </div>
-                <div class="item-subtotal" style="display: none;">المجموع: <span class="subtotal-val">0</span> ل.س</div>
-                <div class="quantity-controls">
-                  <button class="btn-qty" style="background: var(--primary)" onclick="updateQty(this, 1)">+</button>
-                  <input type="number" class="qty-input" value="0" readonly>
-                  <button class="btn-qty" onclick="updateQty(this, -1)">-</button>
-                </div>
-              </div>
-            </div>
-          <? } ?>
-        </div>
-      <? } ?>
+        <div class="loader" id="loader"><i class="fas fa-spinner fa-spin"></i> جاري تحميل المنتجات...</div>
     </div>
 
     <div class="footer-cart" id="footer-cart">
@@ -264,6 +192,60 @@
 
     <script>
       var targetNumber = "963945083365"; 
+      var apiURL = "https://script.google.com/macros/s/AKfycbz8CnO-_aiuboqy7R4kXFA-FQ4uNaLAVc5-_aC-z6txmg2W33wG7c4Igj_NJeKGF-fk/exec"; 
+
+      // جلب البيانات فور تحميل الصفحة
+      document.addEventListener("DOMContentLoaded", function() {
+        fetch(apiURL)
+          .then(response => response.json())
+          .then(data => {
+              document.getElementById('loader').remove();
+              renderData(data);
+          })
+          .catch(error => {
+              document.getElementById('loader').innerHTML = "⚠️ عذراً، فشل تحميل البيانات. يرجى إعادة المحاولة.";
+              console.error('Error:', error);
+          });
+      });
+
+      function renderData(data) {
+        const chipsWrapper = document.getElementById('category-chips');
+        const mainContainer = document.getElementById('main-container');
+
+        for (var category in data) {
+          // إضافة الـ Chips
+          let chipHtml = `<div class="chip" onclick="scrollToCategory('${category}', this)">${category}</div>`;
+          chipsWrapper.insertAdjacentHTML('beforeend', chipHtml);
+
+          // إضافة أقسام المنتجات
+          let sectionHtml = `
+            <div class="category-section" id="section-${category}">
+              <div class="category-header">${category}</div>
+            </div>`;
+          mainContainer.insertAdjacentHTML('beforeend', sectionHtml);
+          
+          let sectionElement = document.getElementById(`section-${category}`);
+
+          // إضافة كروت المنتجات داخل القسم الحالي
+          data[category].forEach(item => {
+            let productHtml = `
+              <div class="product-card" data-name="${item.name}" data-price="${item.price}" data-stock="${item.stock}">
+                <img class="product-image" src="${item.imageUrl}" onerror="this.src='https://via.placeholder.com/600x400?text=Aleppo+Delivery'">
+                <div class="product-info">
+                  <div class="product-name">${item.name}</div>
+                  <div class="product-price">${item.price.toLocaleString()} ل.س </div>
+                  <div class="item-subtotal" style="display: none;">المجموع: <span class="subtotal-val">0</span> ل.س</div>
+                  <div class="quantity-controls">
+                    <button class="btn-qty" style="background: var(--primary)" onclick="updateQty(this, 1)">+</button>
+                    <input type="number" class="qty-input" value="0" readonly>
+                    <button class="btn-qty" onclick="updateQty(this, -1)">-</button>
+                  </div>
+                </div>
+              </div>`;
+              sectionElement.insertAdjacentHTML('beforeend', productHtml);
+          });
+        }
+      }
 
       function toggleTheme() {
         const body = document.body;
@@ -298,14 +280,12 @@
         if (val >= 0 && val <= (parseInt(card.getAttribute('data-stock')) || 999)) {
           input.value = val;
           
-          // تحديث المجموع الفرعي للصنف الواحد داخل الواجهة
           if (val > 0) {
             subtotalRow.style.display = 'block';
             subtotalVal.innerText = (val * price).toLocaleString();
           } else {
             subtotalRow.style.display = 'none';
           }
-          
           calculateTotal();
         }
       }
@@ -343,7 +323,6 @@
           }
         });
 
-        // بناء تفاصيل الفاتورة لكل صنف
         for (var productName in cartData) {
           var q = cartData[productName];
           var p = prices[productName];
