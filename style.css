@@ -1,3 +1,7 @@
+/* شاشة كاملة لمسح البار على الموبايل */
+    html, body {
+      height: 100%;
+    }
 
       :root {
         --primary: #2ecc71;
@@ -156,4 +160,12 @@
       }
       .footer-cart.show { visibility: visible; opacity: 1; bottom: 30px; }
       .whatsapp-send { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+
+
+
+
+
+
+
+
    
