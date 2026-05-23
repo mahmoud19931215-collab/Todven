@@ -318,7 +318,7 @@ class CategoryChips {
     }
 }
 
-// ==================== التطبيق الرئيسي (تم التصحيح) ====================
+// ==================== التطبيق الرئيسي ====================
 class App {
     constructor() {
         this.storage = new StorageService();
@@ -331,7 +331,6 @@ class App {
     }
 
     async init() {
-        // ننتظر حتى يتأكد وجود عناصر الـ DOM (بما أن السكريبت يوضع في نهاية body، هذا آمن)
         await this.storage.init();
         
         this.productsGrid = new ProductsGrid('main-container', this.storage, () => this.updateTotal());
@@ -372,7 +371,6 @@ class App {
             if (loader && !this.fullData) {
                 loader.innerHTML = `❌ فشل التحميل: ${err.message}<br><small>تأكد من اتصال الإنترنت وأن API يعمل</small>`;
             } else if (!this.fullData) {
-                // إذا لم يوجد loader أصلاً، نعرض رسالة في main-container
                 const container = document.getElementById('main-container');
                 if (container) {
                     container.innerHTML = `<div class="loader">❌ فشل التحميل: ${err.message}</div>`;
@@ -385,10 +383,8 @@ class App {
         this.fullData = data;
         this.productsGrid.clear();
         
-        // إخفاء الـ loader بشكل آمن
         const loader = document.getElementById('loader');
         if (loader) loader.style.display = 'none';
-        else console.warn("⚠️ عنصر loader غير موجود");
         
         for (const category in data) {
             this.categoryChips.addCategory(category);
@@ -449,7 +445,7 @@ class App {
     }
 }
 
-// بدء التطبيق بعد تحميل DOM بالكامل (للتأكد)
+// بدء التطبيق
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => new App());
 } else {
