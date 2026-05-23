@@ -77,7 +77,6 @@ class LazyImage {
             imgElement.src = cached;
             return;
         }
-        // تحميل الصورة وحفظها
         try {
             const response = await fetch(url);
             const blob = await response.blob();
@@ -134,11 +133,9 @@ class ProductCard {
         this.subtotalSpan = cardDiv.querySelector('.subtotal-val');
         this.subtotalRow = cardDiv.querySelector('.item-subtotal');
 
-        // ربط الأحداث
         cardDiv.querySelector('.inc-qty').addEventListener('click', () => this.updateQuantity(1));
         cardDiv.querySelector('.dec-qty').addEventListener('click', () => this.updateQuantity(-1));
 
-        // تحميل الصورة
         const imgEl = cardDiv.querySelector(`#${uniqueId}`);
         LazyImage.render(imgEl, this.product.imageUrl, this.storage);
 
@@ -183,8 +180,8 @@ class ProductsGrid {
         this.container = document.getElementById(containerId);
         this.storage = storage;
         this.onTotalUpdate = onTotalUpdate;
-        this.cards = []; // { category, productCard, sectionElement }
-        this.currentView = 'hero'; // hero / list
+        this.cards = [];
+        this.currentView = 'hero';
     }
 
     renderCategory(category, products) {
@@ -202,12 +199,13 @@ class ProductsGrid {
     }
 
     clear() {
-        this.container.innerHTML = '';
+        if (this.container) this.container.innerHTML = '';
         this.cards = [];
     }
 
     setView(view) {
         this.currentView = view;
+        if (!this.container) return;
         this.container.classList.remove('hero-view', 'list-view');
         this.container.classList.add(view === 'hero' ? 'hero-view' : 'list-view');
     }
@@ -248,18 +246,21 @@ class CartFooter {
         this.init();
     }
     init() {
-        const btn = this.footer.querySelector('#whatsappBtn');
+        const btn = this.footer ? this.footer.querySelector('#whatsappBtn') : null;
         if (btn) btn.addEventListener('click', () => this.onSendWhatsApp());
     }
     updateTotal(total) {
+        if (!this.totalSpan) return;
         this.totalSpan.innerText = total.toLocaleString();
         const hasItems = total > 0;
-        if (hasItems) this.footer.classList.add('show');
-        else this.footer.classList.remove('show');
+        if (this.footer) {
+            if (hasItems) this.footer.classList.add('show');
+            else this.footer.classList.remove('show');
+        }
     }
 }
 
-// ==================== مكون الرأس (Theme, View, Search) ====================
+// ==================== مكون الرأس ====================
 class AppHeader {
     constructor(themeBtnId, viewBtnId, searchInputId, onThemeToggle, onViewToggle, onSearch) {
         this.themeBtn = document.getElementById(themeBtnId);
@@ -271,18 +272,21 @@ class AppHeader {
         this.init();
     }
     init() {
-        this.themeBtn.addEventListener('click', () => this.onThemeToggle());
-        this.viewBtn.addEventListener('click', () => this.onViewToggle());
-        this.searchInput.addEventListener('input', (e) => this.onSearch(e.target.value));
+        if (this.themeBtn) this.themeBtn.addEventListener('click', () => this.onThemeToggle());
+        if (this.viewBtn) this.viewBtn.addEventListener('click', () => this.onViewToggle());
+        if (this.searchInput) this.searchInput.addEventListener('input', (e) => this.onSearch(e.target.value));
     }
     setViewIcon(isList) {
+        if (!this.viewBtn) return;
         const icon = this.viewBtn.querySelector('i');
-        if (isList) icon.className = 'fas fa-square';
-        else icon.className = 'fas fa-list';
+        if (icon) {
+            if (isList) icon.className = 'fas fa-square';
+            else icon.className = 'fas fa-list';
+        }
     }
 }
 
-// ==================== مكون تصنيفات (Chips) ====================
+// ==================== مكون التصنيفات ====================
 class CategoryChips {
     constructor(containerId, onSelectCategory) {
         this.container = document.getElementById(containerId);
@@ -291,7 +295,7 @@ class CategoryChips {
         this.activeCategory = 'all';
     }
     addCategory(catName) {
-        if (catName === 'all') return;
+        if (catName === 'all' || !this.container) return;
         if (!this.categories.includes(catName)) {
             this.categories.push(catName);
             const chip = document.createElement('div');
@@ -309,12 +313,12 @@ class CategoryChips {
         this.onSelectCategory(catName);
     }
     resetToAll() {
-        const allChip = this.container.querySelector('.chip[data-category="all"]');
+        const allChip = this.container ? this.container.querySelector('.chip[data-category="all"]') : null;
         if (allChip) this.selectCategory('all', allChip);
     }
 }
 
-// ==================== التطبيق الرئيسي ====================
+// ==================== التطبيق الرئيسي (تم التصحيح) ====================
 class App {
     constructor() {
         this.storage = new StorageService();
@@ -327,8 +331,9 @@ class App {
     }
 
     async init() {
+        // ننتظر حتى يتأكد وجود عناصر الـ DOM (بما أن السكريبت يوضع في نهاية body، هذا آمن)
         await this.storage.init();
-        // تهيئة المكونات
+        
         this.productsGrid = new ProductsGrid('main-container', this.storage, () => this.updateTotal());
         this.cartFooter = new CartFooter('footer-cart', 'grand-total', () => this.sendWhatsApp());
         this.header = new AppHeader(
@@ -339,29 +344,39 @@ class App {
         );
         this.categoryChips = new CategoryChips('category-chips', (cat) => this.onCategorySelected(cat));
 
-        // تحميل البيانات (من الكاش أولاً ثم من الشبكة)
         const cachedData = await this.storage.getApiCache();
         if (cachedData) {
             this.renderFullData(cachedData);
         }
-        // جلب بيانات جديدة
         this.fetchFreshData();
     }
 
     async fetchFreshData() {
         try {
             const response = await fetch(API_URL);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
+            console.log("✅ البيانات المستلمة:", data);
+            
+            if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+                throw new Error("البيانات فارغة أو غير صالحة");
+            }
+            
             if (!this.fullData) {
                 this.renderFullData(data);
-            } else {
-                // تحديث ذكي (اختياري) يمكنك تجاهله حالياً
             }
             await this.storage.saveApiCache(data);
         } catch (err) {
-            console.error('خطأ في تحميل البيانات', err);
-            if (!this.fullData) {
-                document.getElementById('loader').innerHTML = "❌ فشل التحميل، تأكد من الاتصال بالإنترنت";
+            console.error('❌ خطأ في تحميل البيانات:', err);
+            const loader = document.getElementById('loader');
+            if (loader && !this.fullData) {
+                loader.innerHTML = `❌ فشل التحميل: ${err.message}<br><small>تأكد من اتصال الإنترنت وأن API يعمل</small>`;
+            } else if (!this.fullData) {
+                // إذا لم يوجد loader أصلاً، نعرض رسالة في main-container
+                const container = document.getElementById('main-container');
+                if (container) {
+                    container.innerHTML = `<div class="loader">❌ فشل التحميل: ${err.message}</div>`;
+                }
             }
         }
     }
@@ -369,8 +384,12 @@ class App {
     renderFullData(data) {
         this.fullData = data;
         this.productsGrid.clear();
-        document.getElementById('loader').style.display = 'none';
-
+        
+        // إخفاء الـ loader بشكل آمن
+        const loader = document.getElementById('loader');
+        if (loader) loader.style.display = 'none';
+        else console.warn("⚠️ عنصر loader غير موجود");
+        
         for (const category in data) {
             this.categoryChips.addCategory(category);
             this.productsGrid.renderCategory(category, data[category]);
@@ -380,9 +399,7 @@ class App {
 
     onCategorySelected(category) {
         if (category === 'all') {
-            // إظهار جميع الأقسام بالتمرير للأعلى
             window.scrollTo({ top: 0, behavior: 'smooth' });
-            // إظهار كل المنتجات (بدون فلتر إضافي)
             document.querySelectorAll('.category-section').forEach(section => section.style.display = 'block');
         } else {
             document.querySelectorAll('.category-section').forEach(section => section.style.display = 'none');
@@ -411,7 +428,7 @@ class App {
         }
         message += "--------------------------\n";
         const totalSpan = document.getElementById('grand-total');
-        message += `💰 *الإجمالي النهائي: ${totalSpan.innerText} ل.س*`;
+        message += `💰 *الإجمالي النهائي: ${totalSpan ? totalSpan.innerText : '0'} ل.س*`;
         window.open(`https://wa.me/${TARGET_NUMBER}?text=${encodeURIComponent(message)}`);
     }
 
@@ -420,18 +437,21 @@ class App {
         const isDark = body.getAttribute('data-theme') === 'dark';
         body.setAttribute('data-theme', isDark ? 'light' : 'dark');
         const icon = document.getElementById('theme-icon');
-        icon.className = isDark ? 'fas fa-moon' : 'fas fa-sun';
+        if (icon) icon.className = isDark ? 'fas fa-moon' : 'fas fa-sun';
     }
 
     toggleView() {
         const isListView = this.productsGrid.currentView === 'list';
         this.productsGrid.setView(isListView ? 'hero' : 'list');
         this.header.setViewIcon(!isListView);
-        // إعادة تطبيق الفلتر الحالي
-        const searchVal = document.getElementById('search-input').value;
-        this.productsGrid.filterBySearch(searchVal);
+        const searchVal = document.getElementById('search-input');
+        if (searchVal) this.productsGrid.filterBySearch(searchVal.value);
     }
 }
 
-// بدء التطبيق
-new App();
+// بدء التطبيق بعد تحميل DOM بالكامل (للتأكد)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => new App());
+} else {
+    new App();
+}
