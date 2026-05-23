@@ -28,8 +28,120 @@ body {
   margin: 0;
   padding-bottom: 110px;
   color: var(--text-main);
+  position: relative;
+  overflow-x: hidden;
 }
 
+/* ========== خلفية متحركة ========== */
+.background-animation {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  overflow: hidden;
+  background: linear-gradient(135deg, #87CEEB 0%, #E0F6FF 100%);
+  transition: background 0.5s;
+}
+[data-theme="dark"] .background-animation {
+  background: linear-gradient(135deg, #0a0f2a 0%, #0a1a2a 100%);
+}
+
+/* ----- النهار: غيوم متحركة ----- */
+.cloud {
+  position: absolute;
+  background: rgba(255,255,255,0.9);
+  border-radius: 1000px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+  animation: moveCloud linear infinite;
+}
+.cloud1 { width: 180px; height: 80px; top: 10%; left: -200px; animation-duration: 25s; }
+.cloud1:before, .cloud1:after {
+  content: '';
+  position: absolute;
+  background: rgba(255,255,255,0.9);
+  border-radius: 50%;
+}
+.cloud1:before { width: 80px; height: 80px; top: -30px; left: 20px; }
+.cloud1:after { width: 100px; height: 100px; top: -40px; left: 70px; }
+
+.cloud2 { width: 220px; height: 90px; top: 40%; left: -250px; animation-duration: 35s; animation-delay: -5s; }
+.cloud2:before, .cloud2:after {
+  content: '';
+  position: absolute;
+  background: rgba(255,255,255,0.9);
+  border-radius: 50%;
+}
+.cloud2:before { width: 100px; height: 100px; top: -40px; left: 30px; }
+.cloud2:after { width: 120px; height: 120px; top: -50px; left: 90px; }
+
+.cloud3 { width: 150px; height: 70px; top: 70%; left: -150px; animation-duration: 28s; animation-delay: -10s; }
+.cloud3:before, .cloud3:after {
+  content: '';
+  position: absolute;
+  background: rgba(255,255,255,0.9);
+  border-radius: 50%;
+}
+.cloud3:before { width: 70px; height: 70px; top: -25px; left: 15px; }
+.cloud3:after { width: 80px; height: 80px; top: -35px; left: 60px; }
+
+.cloud4 { width: 200px; height: 80px; top: 85%; left: -200px; animation-duration: 40s; animation-delay: -15s; }
+.cloud4:before, .cloud4:after {
+  content: '';
+  position: absolute;
+  background: rgba(255,255,255,0.9);
+  border-radius: 50%;
+}
+.cloud4:before { width: 90px; height: 90px; top: -35px; left: 20px; }
+.cloud4:after { width: 110px; height: 110px; top: -45px; left: 80px; }
+
+@keyframes moveCloud {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(100vw + 300px)); }
+}
+
+/* ----- الليل: نجوم متحركة وقمر ----- */
+.night-elements {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.moon {
+  position: absolute;
+  top: 15%;
+  right: 10%;
+  width: 80px;
+  height: 80px;
+  background: #f5e6b0;
+  border-radius: 50%;
+  box-shadow: 0 0 20px #ffefb0;
+  animation: floatMoon 8s ease-in-out infinite;
+}
+@keyframes floatMoon {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
+.star {
+  position: absolute;
+  background: white;
+  border-radius: 50%;
+  opacity: 0;
+  animation: twinkle 3s infinite;
+}
+.star1 { width: 3px; height: 3px; top: 20%; left: 15%; animation-delay: 0s; }
+.star2 { width: 2px; height: 2px; top: 35%; left: 70%; animation-delay: 0.5s; }
+.star3 { width: 4px; height: 4px; top: 60%; left: 25%; animation-delay: 1s; }
+.star4 { width: 2px; height: 2px; top: 75%; left: 85%; animation-delay: 1.5s; }
+.star5 { width: 3px; height: 3px; top: 10%; left: 45%; animation-delay: 2s; }
+.star6 { width: 2px; height: 2px; top: 50%; left: 10%; animation-delay: 2.5s; }
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* باقي الأنماط الأساسية (كما هي، لم تتغير) */
 .header {
   background: var(--bg-card);
   padding: 12px 15px;
@@ -41,7 +153,6 @@ body {
   align-items: center;
   box-shadow: var(--shadow);
 }
-
 #search-input {
   flex: 1;
   padding: 10px 15px;
@@ -51,7 +162,6 @@ body {
   background: var(--bg-body);
   color: var(--text-main);
 }
-
 .icon-btn {
   background: var(--bg-body);
   border: 1px solid var(--border-color);
@@ -64,7 +174,6 @@ body {
   align-items: center;
   justify-content: center;
 }
-
 .chips-wrapper {
   display: flex;
   overflow-x: auto;
@@ -77,7 +186,6 @@ body {
   scrollbar-width: none;
 }
 .chips-wrapper::-webkit-scrollbar { display: none; }
-
 .chip {
   padding: 7px 18px;
   border-radius: 50px;
@@ -90,13 +198,11 @@ body {
   cursor: pointer;
 }
 .chip.active { background: var(--primary); color: white; border-color: var(--primary); }
-
-.container { padding: 15px; max-width: 800px; margin: auto; }
+.container { padding: 15px; max-width: 800px; margin: auto; position: relative; z-index: 1; background: transparent; }
 .category-header { font-size: 20px; font-weight: 800; margin: 25px 0 15px; padding-right: 12px; border-right: 5px solid var(--primary); }
-
 .loader { text-align: center; padding: 50px 20px; font-size: 18px; color: var(--text-muted); }
 
-/* Hero View (كبير) */
+/* Hero View */
 .product-container.hero-view .product-card {
   display: block;
   background: var(--bg-card);
@@ -122,7 +228,7 @@ body {
 .product-container.hero-view .btn-qty { width: 50px; height: 50px; font-size: 24px; }
 .product-container.hero-view .qty-input { font-size: 22px; width: 50px; }
 
-/* List View (محسّن) */
+/* List View */
 .product-container.list-view .product-card {
   display: flex;
   align-items: center;
@@ -206,26 +312,13 @@ body {
   border: none;
   color: var(--text-main);
 }
-
-/* تحسين اللمس للموبايل */
 @media (max-width: 600px) {
-  .product-container.list-view .product-image {
-    width: 80px;
-    height: 80px;
-  }
-  .product-container.list-view .product-name {
-    font-size: 15px;
-  }
-  .product-container.list-view .btn-qty {
-    width: 40px;
-    height: 40px;
-    border-radius: 14px;
-  }
+  .product-container.list-view .product-image { width: 80px; height: 80px; }
+  .product-container.list-view .product-name { font-size: 15px; }
+  .product-container.list-view .btn-qty { width: 40px; height: 40px; border-radius: 14px; }
 }
-
 .product-name { font-weight: 700; }
 .product-price { color: var(--primary); font-weight: 800; }
-
 .quantity-controls { display: flex; align-items: center; }
 .btn-qty { border-radius: 50%; border: none; background: var(--secondary); color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .qty-input { text-align: center; border: none; background: transparent; color: var(--text-main); font-weight: 700; }
@@ -240,79 +333,80 @@ body {
 .footer-cart.show { visibility: visible; opacity: 1; bottom: 30px; }
 .whatsapp-send { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; }
 
-/* ========== عناصر اللعب (Gamification) ========== */
+/* شريط اللعب */
 .gamification-bar {
-    background: var(--bg-card);
-    padding: 12px 15px;
-    margin: 10px 15px;
-    border-radius: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-shadow: var(--shadow);
-    direction: rtl;
-    gap: 12px;
-    flex-wrap: wrap;
+  background: var(--bg-card);
+  padding: 12px 15px;
+  margin: 10px 15px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--shadow);
+  direction: rtl;
+  gap: 12px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 2;
 }
-
 .xp-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--primary-light);
-    padding: 6px 12px;
-    border-radius: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--primary-light);
+  padding: 6px 12px;
+  border-radius: 40px;
 }
 .xp-info i { font-size: 20px; color: #ffc107; }
 .level-info i { font-size: 20px; color: #9b59b6; }
-
 .progress-container {
-    flex: 1;
-    height: 10px;
-    background: var(--border-color);
-    border-radius: 10px;
-    overflow: hidden;
+  flex: 1;
+  height: 10px;
+  background: var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
 }
 .xp-progress {
-    width: 0%;
-    height: 100%;
-    background: linear-gradient(90deg, #2ecc71, #f1c40f);
-    transition: width 0.3s;
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #2ecc71, #f1c40f);
+  transition: width 0.3s;
 }
-
 .badge-area {
-    display: flex;
-    gap: 8px;
-    margin: 0 15px 10px 15px;
-    flex-wrap: wrap;
+  display: flex;
+  gap: 8px;
+  margin: 0 15px 10px 15px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 2;
 }
 .badge {
-    background: #f39c12;
-    color: white;
-    border-radius: 30px;
-    padding: 4px 10px;
-    font-size: 12px;
-    font-weight: bold;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+  background: #f39c12;
+  color: white;
+  border-radius: 30px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 .toast-points {
-    position: fixed;
-    bottom: 100px;
-    left: 20px;
-    background: #2ecc71;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 40px;
-    font-weight: bold;
-    z-index: 3000;
-    animation: fadeUp 1s ease-out forwards;
-    pointer-events: none;
+  position: fixed;
+  bottom: 100px;
+  left: 20px;
+  background: #2ecc71;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 40px;
+  font-weight: bold;
+  z-index: 3000;
+  animation: fadeUp 1s ease-out forwards;
+  pointer-events: none;
 }
 @keyframes fadeUp {
-    0% { opacity: 0; transform: translateY(20px); }
-    20% { opacity: 1; transform: translateY(0); }
-    80% { opacity: 1; }
-    100% { opacity: 0; transform: translateY(-20px); }
+  0% { opacity: 0; transform: translateY(20px); }
+  20% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-20px); }
 }
