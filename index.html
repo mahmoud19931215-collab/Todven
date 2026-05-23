@@ -10,16 +10,14 @@
 </head>
 <body>
 
-    <!-- طبقة الخلفية المتحركة (خلف كل المحتوى) -->
+    <!-- طبقة الخلفية المتحركة -->
     <div class="background-animation">
-        <!-- عناصر النهار (غيوم) -->
         <div class="clouds-container day-elements">
             <div class="cloud cloud1"></div>
             <div class="cloud cloud2"></div>
             <div class="cloud cloud3"></div>
             <div class="cloud cloud4"></div>
         </div>
-        <!-- عناصر الليل (نجوم وقمر) -->
         <div class="night-elements" style="display: none;">
             <div class="moon"></div>
             <div class="star star1"></div>
@@ -33,6 +31,7 @@
 
     <!-- رأس التطبيق -->
     <div class="header">
+        <button class="icon-btn" id="soundToggleBtn" title="تشغيل الصوت"><i id="soundIcon" class="fas fa-volume-mute"></i></button>
         <button class="icon-btn" id="themeToggleBtn"><i id="theme-icon" class="fas fa-moon"></i></button>
         <button class="icon-btn" id="viewToggleBtn"><i id="view-icon" class="fas fa-list"></i></button>
         <input type="text" id="search-input" placeholder="ابحث عما تريد...">
