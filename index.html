@@ -5,36 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="style.css">
-    <!-- ربط ملف manifest للتطبيق -->
     <link rel="manifest" href="manifest.json">
     <title>Togven</title>
-
-   
 </head>
 <body>
 
+    <!-- رأس التطبيق -->
     <div class="header">
-      <button class="icon-btn" onclick="toggleTheme()"><i id="theme-icon" class="fas fa-moon"></i></button>
-      <button class="icon-btn" onclick="toggleView()"><i id="view-icon" class="fas fa-list"></i></button>
-      <input type="text" id="search-input" placeholder="ابحث عما تريد..." onkeyup="filterProducts()">
+        <button class="icon-btn" id="themeToggleBtn"><i id="theme-icon" class="fas fa-moon"></i></button>
+        <button class="icon-btn" id="viewToggleBtn"><i id="view-icon" class="fas fa-list"></i></button>
+        <input type="text" id="search-input" placeholder="ابحث عما تريد...">
     </div>
 
+    <!-- أزرار التصنيفات (تعبأ بواسطة JS) -->
     <div class="chips-wrapper" id="category-chips">
-        <div class="chip active" onclick="scrollToCategory('all', this)">الكل</div>
+        <div class="chip active" data-category="all">الكل</div>
     </div>
-    
+
+    <!-- حاوية المنتجات -->
     <div class="container product-container hero-view" id="main-container">
         <div class="loader" id="loader"><i class="fas fa-spinner fa-spin"></i> جاري تحميل المنتجات...</div>
     </div>
 
+    <!-- الفوتر الخاص بالسلة -->
     <div class="footer-cart" id="footer-cart">
-      <div>
-        <div style="font-size: 12px; opacity: 0.8;">الإجمالي النهائي:</div>
-        <div style="font-size: 18px; font-weight: 800;"><span id="grand-total">0</span> ل.س</div>
-      </div>
-      <button onclick="sendWhatsApp()" class="whatsapp-send">إتمام الطلب <i class="fab fa-whatsapp"></i></button>
+        <div>
+            <div style="font-size: 12px; opacity: 0.8;">الإجمالي النهائي:</div>
+            <div style="font-size: 18px; font-weight: 800;"><span id="grand-total">0</span> ل.س</div>
+        </div>
+        <button id="whatsappBtn" class="whatsapp-send">إتمام الطلب <i class="fab fa-whatsapp"></i></button>
     </div>
-<script src="app.js"></script>
 
+    <script src="app.js" type="module"></script>
 </body>
 </html>
