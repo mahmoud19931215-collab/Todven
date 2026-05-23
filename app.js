@@ -29,7 +29,6 @@ class StorageService {
             request.onerror = () => resolve();
         });
     }
-
     async getImage(url) {
         if (!this.db) return null;
         return new Promise((resolve) => {
@@ -39,13 +38,11 @@ class StorageService {
             get.onerror = () => resolve(null);
         });
     }
-
     async saveImage(url, base64) {
         if (!this.db) return;
         const tx = this.db.transaction([IMAGE_STORE], "readwrite");
         tx.objectStore(IMAGE_STORE).put(base64, url);
     }
-
     async getApiCache() {
         if (!this.db) return null;
         return new Promise((resolve) => {
@@ -53,14 +50,13 @@ class StorageService {
             const get = tx.objectStore(API_CACHE_STORE).get("mainData");
             get.onsuccess = () => {
                 const cached = get.result;
-                if (cached && (Date.now() - cached.timestamp) < 3600000) // ساعة واحدة
+                if (cached && (Date.now() - cached.timestamp) < 3600000)
                     resolve(cached.data);
                 else resolve(null);
             };
             get.onerror = () => resolve(null);
         });
     }
-
     async saveApiCache(data) {
         if (!this.db) return;
         const tx = this.db.transaction([API_CACHE_STORE], "readwrite");
@@ -68,7 +64,7 @@ class StorageService {
     }
 }
 
-// ==================== مكون الصورة مع التخزين ====================
+// ==================== مكون الصورة ====================
 class LazyImage {
     static async render(imgElement, url, storage) {
         if (!url) return;
@@ -93,7 +89,7 @@ class LazyImage {
     }
 }
 
-// ==================== مكون المنتج (Product Card) ====================
+// ==================== مكون المنتج ====================
 class ProductCard {
     constructor(product, storage, onUpdateTotal) {
         this.product = product;
@@ -105,7 +101,6 @@ class ProductCard {
         this.subtotalSpan = null;
         this.subtotalRow = null;
     }
-
     render() {
         const uniqueId = `img_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
         const cardDiv = document.createElement('div');
@@ -113,7 +108,6 @@ class ProductCard {
         cardDiv.setAttribute('data-name', this.product.name);
         cardDiv.setAttribute('data-price', this.product.price);
         cardDiv.setAttribute('data-stock', this.product.stock || 999);
-
         cardDiv.innerHTML = `
             <img class="product-image" id="${uniqueId}" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23f0f0f0'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23999' font-size='10'%3E...%3C/text%3E%3C/svg%3E">
             <div class="product-info">
@@ -131,21 +125,16 @@ class ProductCard {
         this.qtyInput = cardDiv.querySelector('.qty-input');
         this.subtotalSpan = cardDiv.querySelector('.subtotal-val');
         this.subtotalRow = cardDiv.querySelector('.item-subtotal');
-
         cardDiv.querySelector('.inc-qty').addEventListener('click', () => this.updateQuantity(1));
         cardDiv.querySelector('.dec-qty').addEventListener('click', () => this.updateQuantity(-1));
-
         const imgEl = cardDiv.querySelector(`#${uniqueId}`);
         LazyImage.render(imgEl, this.product.imageUrl, this.storage);
-
         return cardDiv;
     }
-
     updateQuantity(delta) {
         const newVal = this.quantity + delta;
         const stock = parseInt(this.element.getAttribute('data-stock')) || 999;
         if (newVal >= 0 && newVal <= stock) {
-            const oldQty = this.quantity;
             this.quantity = newVal;
             this.qtyInput.value = this.quantity;
             if (this.quantity > 0) {
@@ -160,11 +149,9 @@ class ProductCard {
             }
         }
     }
-
     getQuantity() { return this.quantity; }
     getPrice() { return this.product.price; }
     getName() { return this.product.name; }
-
     escapeHtml(str) {
         if (!str) return '';
         return str.replace(/[&<>]/g, (m) => {
@@ -185,13 +172,11 @@ class ProductsGrid {
         this.cards = [];
         this.currentView = 'hero';
     }
-
     renderCategory(category, products) {
         const sectionId = `section-${category}`;
         const sectionHtml = `<div class="category-section" id="${sectionId}"><div class="category-header">${category}</div></div>`;
         this.container.insertAdjacentHTML('beforeend', sectionHtml);
         const sectionEl = document.getElementById(sectionId);
-
         products.forEach(product => {
             const card = new ProductCard(product, this.storage, (productName) => this.onTotalUpdate(productName));
             const cardElement = card.render();
@@ -199,19 +184,16 @@ class ProductsGrid {
             this.cards.push({ category, card, sectionElement: sectionEl });
         });
     }
-
     clear() {
         if (this.container) this.container.innerHTML = '';
         this.cards = [];
     }
-
     setView(view) {
         this.currentView = view;
         if (!this.container) return;
         this.container.classList.remove('hero-view', 'list-view');
         this.container.classList.add(view === 'hero' ? 'hero-view' : 'list-view');
     }
-
     filterBySearch(query) {
         const lowerQuery = query.toLowerCase();
         this.cards.forEach(({ card }) => {
@@ -220,7 +202,6 @@ class ProductsGrid {
             card.element.style.display = matches ? (this.currentView === 'hero' ? 'block' : 'flex') : 'none';
         });
     }
-
     getAllCartItems() {
         return this.cards
             .filter(({ card }) => card.getQuantity() > 0)
@@ -230,7 +211,6 @@ class ProductsGrid {
                 price: card.getPrice()
             }));
     }
-
     scrollToCategory(category) {
         const section = document.getElementById(`section-${category}`);
         if (section) {
@@ -239,7 +219,7 @@ class ProductsGrid {
     }
 }
 
-// ==================== مكون الفوتر والسلة ====================
+// ==================== مكون الفوتر ====================
 class CartFooter {
     constructor(footerId, totalSpanId, onSendWhatsApp) {
         this.footer = document.getElementById(footerId);
@@ -320,7 +300,7 @@ class CategoryChips {
     }
 }
 
-// ==================== نظام اللعب (Gamification) ====================
+// ==================== نظام اللعب ====================
 class Gamification {
     constructor() {
         this.xp = 0;
@@ -329,7 +309,6 @@ class Gamification {
         this.loadFromStorage();
         this.updateUI();
     }
-
     loadFromStorage() {
         const saved = localStorage.getItem('gameStats');
         if (saved) {
@@ -339,7 +318,6 @@ class Gamification {
             this.badges = data.badges || [];
         }
     }
-
     saveToStorage() {
         localStorage.setItem('gameStats', JSON.stringify({
             xp: this.xp,
@@ -347,7 +325,6 @@ class Gamification {
             badges: this.badges
         }));
     }
-
     addXP(amount, productName = '') {
         this.xp += amount;
         this.showToast(`+${amount} XP`, productName);
@@ -356,7 +333,6 @@ class Gamification {
         this.updateUI();
         this.saveToStorage();
     }
-
     checkLevelUp() {
         let newLevel = 1;
         while (this.xp >= newLevel * 100) {
@@ -367,7 +343,6 @@ class Gamification {
             this.showToast(`🎉 رفعت لمستوى ${this.level} ! 🎉`, '', 2000);
         }
     }
-
     checkBadges() {
         if (this.xp >= 5 && !this.badges.includes('starter')) {
             this.badges.push('starter');
@@ -383,7 +358,6 @@ class Gamification {
         }
         this.updateBadgesUI();
     }
-
     showToast(msg, productName = '', duration = 1200) {
         const toast = document.createElement('div');
         toast.className = 'toast-points';
@@ -391,7 +365,6 @@ class Gamification {
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), duration);
     }
-
     updateUI() {
         const xpSpan = document.getElementById('xpPoints');
         const levelSpan = document.getElementById('levelNum');
@@ -404,7 +377,6 @@ class Gamification {
             progressFill.style.width = `${percent}%`;
         }
     }
-
     updateBadgesUI() {
         const badgeArea = document.getElementById('badgeArea');
         if (!badgeArea) return;
@@ -441,13 +413,11 @@ class App {
         this.categoryChips = null;
         this.fullData = null;
         this.lastTotalQty = 0;
-        window.gameInstance = this.game; // للوصول من أي مكان
+        window.gameInstance = this.game;
         this.init();
     }
-
     async init() {
         await this.storage.init();
-        
         this.productsGrid = new ProductsGrid('main-container', this.storage, (productName) => {
             this.updateTotal(productName);
         });
@@ -461,55 +431,41 @@ class App {
         this.categoryChips = new CategoryChips('category-chips', (cat) => this.onCategorySelected(cat));
 
         const cachedData = await this.storage.getApiCache();
-        if (cachedData) {
-            this.renderFullData(cachedData);
-        }
+        if (cachedData) this.renderFullData(cachedData);
         this.fetchFreshData();
     }
-
     async fetchFreshData() {
         try {
             const response = await fetch(API_URL);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
-            console.log("✅ البيانات المستلمة:", data);
-            
             if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
                 throw new Error("البيانات فارغة أو غير صالحة");
             }
-            
-            if (!this.fullData) {
-                this.renderFullData(data);
-            }
+            if (!this.fullData) this.renderFullData(data);
             await this.storage.saveApiCache(data);
         } catch (err) {
-            console.error('❌ خطأ في تحميل البيانات:', err);
+            console.error('❌ خطأ:', err);
             const loader = document.getElementById('loader');
             if (loader && !this.fullData) {
                 loader.innerHTML = `❌ فشل التحميل: ${err.message}<br><small>تأكد من اتصال الإنترنت وأن API يعمل</small>`;
             } else if (!this.fullData) {
                 const container = document.getElementById('main-container');
-                if (container) {
-                    container.innerHTML = `<div class="loader">❌ فشل التحميل: ${err.message}</div>`;
-                }
+                if (container) container.innerHTML = `<div class="loader">❌ فشل التحميل: ${err.message}</div>`;
             }
         }
     }
-
     renderFullData(data) {
         this.fullData = data;
         this.productsGrid.clear();
-        
         const loader = document.getElementById('loader');
         if (loader) loader.style.display = 'none';
-        
         for (const category in data) {
             this.categoryChips.addCategory(category);
             this.productsGrid.renderCategory(category, data[category]);
         }
         this.updateTotal();
     }
-
     onCategorySelected(category) {
         if (category === 'all') {
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -521,25 +477,20 @@ class App {
             this.productsGrid.scrollToCategory(category);
         }
     }
-
     updateTotal(productName = null) {
         const items = this.productsGrid.getAllCartItems();
-        let total = 0;
-        let totalQty = 0;
+        let total = 0, totalQty = 0;
         for (const item of items) {
             total += item.quantity * item.price;
             totalQty += item.quantity;
         }
         this.cartFooter.updateTotal(total);
-        
-        // إضافة نقاط الخبرة عند زيادة الكمية
         if (this.lastTotalQty !== totalQty && totalQty > this.lastTotalQty) {
-            const gained = (totalQty - this.lastTotalQty) * 5; // 5 XP لكل منتج مضاف
+            const gained = (totalQty - this.lastTotalQty) * 5;
             this.game.addXP(gained, productName || 'منتج');
         }
         this.lastTotalQty = totalQty;
     }
-
     sendWhatsApp() {
         const items = this.productsGrid.getAllCartItems();
         if (items.length === 0) return;
@@ -552,19 +503,28 @@ class App {
         const totalSpan = document.getElementById('grand-total');
         message += `💰 *الإجمالي النهائي: ${totalSpan ? totalSpan.innerText : '0'} ل.س*`;
         window.open(`https://wa.me/${TARGET_NUMBER}?text=${encodeURIComponent(message)}`);
-        
-        // مكافأة إضافية عند إرسال الطلب
         this.game.addXP(20, 'إتمام الطلب');
     }
-
     toggleTheme() {
         const body = document.body;
         const isDark = body.getAttribute('data-theme') === 'dark';
         body.setAttribute('data-theme', isDark ? 'light' : 'dark');
         const icon = document.getElementById('theme-icon');
         if (icon) icon.className = isDark ? 'fas fa-moon' : 'fas fa-sun';
+        
+        // تبديل الخلفية المتحركة
+        const dayElements = document.querySelector('.day-elements');
+        const nightElements = document.querySelector('.night-elements');
+        if (dayElements && nightElements) {
+            if (isDark) {
+                dayElements.style.display = 'none';
+                nightElements.style.display = 'block';
+            } else {
+                dayElements.style.display = 'block';
+                nightElements.style.display = 'none';
+            }
+        }
     }
-
     toggleView() {
         const isListView = this.productsGrid.currentView === 'list';
         this.productsGrid.setView(isListView ? 'hero' : 'list');
