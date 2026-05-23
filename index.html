@@ -17,7 +17,23 @@
         <input type="text" id="search-input" placeholder="ابحث عما تريد...">
     </div>
 
-    <!-- أزرار التصنيفات (تعبأ بواسطة JS) -->
+    <!-- شريط اللعب (نقاط، مستوى، شارات) -->
+    <div class="gamification-bar" id="gamificationBar">
+        <div class="xp-info">
+            <i class="fas fa-star"></i>
+            <span id="xpPoints">0</span> XP
+        </div>
+        <div class="progress-container">
+            <div class="xp-progress" id="xpProgress" style="width:0%"></div>
+        </div>
+        <div class="level-info">
+            <i class="fas fa-trophy"></i>
+            <span id="levelNum">1</span>
+        </div>
+    </div>
+    <div class="badge-area" id="badgeArea"></div>
+
+    <!-- أزرار التصنيفات -->
     <div class="chips-wrapper" id="category-chips">
         <div class="chip active" data-category="all">الكل</div>
     </div>
