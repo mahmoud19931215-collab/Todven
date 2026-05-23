@@ -95,10 +95,9 @@ class LazyImage {
 
 // ==================== مكون المنتج (Product Card) ====================
 class ProductCard {
-    constructor(product, storage, container, onUpdateTotal) {
+    constructor(product, storage, onUpdateTotal) {
         this.product = product;
         this.storage = storage;
-        this.container = container;
         this.onUpdateTotal = onUpdateTotal;
         this.quantity = 0;
         this.element = null;
@@ -146,6 +145,7 @@ class ProductCard {
         const newVal = this.quantity + delta;
         const stock = parseInt(this.element.getAttribute('data-stock')) || 999;
         if (newVal >= 0 && newVal <= stock) {
+            const oldQty = this.quantity;
             this.quantity = newVal;
             this.qtyInput.value = this.quantity;
             if (this.quantity > 0) {
@@ -155,7 +155,9 @@ class ProductCard {
             } else {
                 this.subtotalRow.style.display = 'none';
             }
-            if (this.onUpdateTotal) this.onUpdateTotal();
+            if (this.onUpdateTotal) {
+                this.onUpdateTotal(delta > 0 ? this.product.name : null);
+            }
         }
     }
 
@@ -191,7 +193,7 @@ class ProductsGrid {
         const sectionEl = document.getElementById(sectionId);
 
         products.forEach(product => {
-            const card = new ProductCard(product, this.storage, sectionEl, () => this.onTotalUpdate());
+            const card = new ProductCard(product, this.storage, (productName) => this.onTotalUpdate(productName));
             const cardElement = card.render();
             sectionEl.appendChild(cardElement);
             this.cards.push({ category, card, sectionElement: sectionEl });
@@ -318,22 +320,137 @@ class CategoryChips {
     }
 }
 
+// ==================== نظام اللعب (Gamification) ====================
+class Gamification {
+    constructor() {
+        this.xp = 0;
+        this.level = 1;
+        this.badges = [];
+        this.loadFromStorage();
+        this.updateUI();
+    }
+
+    loadFromStorage() {
+        const saved = localStorage.getItem('gameStats');
+        if (saved) {
+            const data = JSON.parse(saved);
+            this.xp = data.xp || 0;
+            this.level = data.level || 1;
+            this.badges = data.badges || [];
+        }
+    }
+
+    saveToStorage() {
+        localStorage.setItem('gameStats', JSON.stringify({
+            xp: this.xp,
+            level: this.level,
+            badges: this.badges
+        }));
+    }
+
+    addXP(amount, productName = '') {
+        this.xp += amount;
+        this.showToast(`+${amount} XP`, productName);
+        this.checkLevelUp();
+        this.checkBadges();
+        this.updateUI();
+        this.saveToStorage();
+    }
+
+    checkLevelUp() {
+        let newLevel = 1;
+        while (this.xp >= newLevel * 100) {
+            newLevel++;
+        }
+        if (newLevel > this.level) {
+            this.level = newLevel;
+            this.showToast(`🎉 رفعت لمستوى ${this.level} ! 🎉`, '', 2000);
+        }
+    }
+
+    checkBadges() {
+        if (this.xp >= 5 && !this.badges.includes('starter')) {
+            this.badges.push('starter');
+            this.showToast('🏅 شارة: البداية القوية', '', 2000);
+        }
+        if (this.xp >= 50 && !this.badges.includes('warrior')) {
+            this.badges.push('warrior');
+            this.showToast('⚔️ شارة: المحارب', '', 2000);
+        }
+        if (this.xp >= 150 && !this.badges.includes('legend')) {
+            this.badges.push('legend');
+            this.showToast('👑 شارة: الأسطوري', '', 2000);
+        }
+        this.updateBadgesUI();
+    }
+
+    showToast(msg, productName = '', duration = 1200) {
+        const toast = document.createElement('div');
+        toast.className = 'toast-points';
+        toast.innerHTML = productName ? `✨ ${productName}<br>${msg}` : msg;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), duration);
+    }
+
+    updateUI() {
+        const xpSpan = document.getElementById('xpPoints');
+        const levelSpan = document.getElementById('levelNum');
+        const progressFill = document.getElementById('xpProgress');
+        if (xpSpan) xpSpan.innerText = this.xp;
+        if (levelSpan) levelSpan.innerText = this.level;
+        if (progressFill) {
+            const xpInCurrentLevel = this.xp % 100;
+            const percent = (xpInCurrentLevel / 100) * 100;
+            progressFill.style.width = `${percent}%`;
+        }
+    }
+
+    updateBadgesUI() {
+        const badgeArea = document.getElementById('badgeArea');
+        if (!badgeArea) return;
+        badgeArea.innerHTML = '';
+        if (this.badges.includes('starter')) {
+            const badge = document.createElement('div');
+            badge.className = 'badge';
+            badge.innerHTML = '<i class="fas fa-seedling"></i> مبتدئ';
+            badgeArea.appendChild(badge);
+        }
+        if (this.badges.includes('warrior')) {
+            const badge = document.createElement('div');
+            badge.className = 'badge';
+            badge.innerHTML = '<i class="fas fa-shield-alt"></i> محارب';
+            badgeArea.appendChild(badge);
+        }
+        if (this.badges.includes('legend')) {
+            const badge = document.createElement('div');
+            badge.className = 'badge';
+            badge.innerHTML = '<i class="fas fa-crown"></i> أسطوري';
+            badgeArea.appendChild(badge);
+        }
+    }
+}
+
 // ==================== التطبيق الرئيسي ====================
 class App {
     constructor() {
         this.storage = new StorageService();
+        this.game = new Gamification();
         this.productsGrid = null;
         this.cartFooter = null;
         this.header = null;
         this.categoryChips = null;
         this.fullData = null;
+        this.lastTotalQty = 0;
+        window.gameInstance = this.game; // للوصول من أي مكان
         this.init();
     }
 
     async init() {
         await this.storage.init();
         
-        this.productsGrid = new ProductsGrid('main-container', this.storage, () => this.updateTotal());
+        this.productsGrid = new ProductsGrid('main-container', this.storage, (productName) => {
+            this.updateTotal(productName);
+        });
         this.cartFooter = new CartFooter('footer-cart', 'grand-total', () => this.sendWhatsApp());
         this.header = new AppHeader(
             'themeToggleBtn', 'viewToggleBtn', 'search-input',
@@ -405,13 +522,22 @@ class App {
         }
     }
 
-    updateTotal() {
+    updateTotal(productName = null) {
         const items = this.productsGrid.getAllCartItems();
         let total = 0;
+        let totalQty = 0;
         for (const item of items) {
             total += item.quantity * item.price;
+            totalQty += item.quantity;
         }
         this.cartFooter.updateTotal(total);
+        
+        // إضافة نقاط الخبرة عند زيادة الكمية
+        if (this.lastTotalQty !== totalQty && totalQty > this.lastTotalQty) {
+            const gained = (totalQty - this.lastTotalQty) * 5; // 5 XP لكل منتج مضاف
+            this.game.addXP(gained, productName || 'منتج');
+        }
+        this.lastTotalQty = totalQty;
     }
 
     sendWhatsApp() {
@@ -426,6 +552,9 @@ class App {
         const totalSpan = document.getElementById('grand-total');
         message += `💰 *الإجمالي النهائي: ${totalSpan ? totalSpan.innerText : '0'} ل.س*`;
         window.open(`https://wa.me/${TARGET_NUMBER}?text=${encodeURIComponent(message)}`);
+        
+        // مكافأة إضافية عند إرسال الطلب
+        this.game.addXP(20, 'إتمام الطلب');
     }
 
     toggleTheme() {
