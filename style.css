@@ -210,28 +210,31 @@ body {
   flex-wrap: wrap;
 }
 
-/* صور المنتجات: عرض كامل مع padding بسيط وطول تلقائي */
+/* ========== صور المنتجات: حواف ملفوفة ========== */
 .product-image {
   width: 100%;
   height: auto;
   object-fit: contain;
   padding: 8px;
   background: rgba(255, 255, 255, 0.4);
+  border-radius: 24px;  /* حواف مدورة مثل الكرت */
 }
 
-/* Hero View - الصورة تاخذ عرض كامل بدون قيود ارتفاع */
+/* Hero View - الصورة تاخذ عرض كامل */
 .product-container.hero-view .product-image {
   max-height: none;
   width: 100%;
+  border-radius: 24px 24px 0 0; /* الزوايا العليا فقط مدورة مثل الكرت */
 }
 
-/* List View - الصورة بحجم ثابت مناسب لكن بدون تشويه */
+/* List View - الصورة بحجم ثابت مع حواف مدورة */
 .product-container.list-view .product-image {
   width: 100px;
   height: auto;
   max-height: 100px;
   object-fit: contain;
   padding: 4px;
+  border-radius: 16px;
 }
 
 /* ========== أزرار + و - بالشكل القديم الجميل ========== */
@@ -269,7 +272,7 @@ body {
   color: var(--text-main);
 }
 
-/* وضع الروية الكبير (Hero) - نضمن أن الأزرار في المنتصف أفقياً */
+/* وضع الروية الكبير (Hero) - الأزرار في المنتصف */
 .product-container.hero-view .quantity-controls {
   justify-content: center;
   gap: 20px;
@@ -388,7 +391,7 @@ body {
   }
 }
 
-/* السلة والشارات والنقاط */
+/* ========== السلة والشارات والنقاط ========== */
 .footer-cart {
   position: fixed;
   bottom: 20px;
@@ -414,6 +417,8 @@ body {
   opacity: 1;
   bottom: 30px;
 }
+
+/* تحسين لون نص زر الواتساب ليكون أبيض دائماً */
 .whatsapp-send {
   background: var(--primary);
   border: none;
@@ -423,8 +428,15 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  color: white;          /* النص أبيض ثابت */
+  text-shadow: 0 0 2px rgba(0,0,0,0.3); /* ظل خفيف للقراءة */
+  cursor: pointer;
+}
+/* ضمان أن الأيقونة أيضاً بيضاء */
+.whatsapp-send i {
   color: white;
 }
+
 .badge-area {
   display: flex;
   gap: 8px;
