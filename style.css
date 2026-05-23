@@ -36,7 +36,7 @@ body {
   overflow-x: hidden;
 }
 
-/* ========== خلفية متحركة (كما هي) ========== */
+/* ========== خلفية متحركة ========== */
 .background-animation {
   position: fixed;
   top: 0;
@@ -52,7 +52,7 @@ body {
   background: linear-gradient(135deg, #0a0f2a 0%, #0a1a2a 100%);
 }
 
-/* الغيوم والنجوم (نفسها) */
+/* الغيوم */
 .cloud {
   position: absolute;
   background: rgba(255, 255, 255, 0.9);
@@ -101,6 +101,7 @@ body {
   to { transform: translateX(calc(100vw + 300px)); }
 }
 
+/* النجوم والقمر */
 .night-elements {
   position: relative;
   width: 100%;
@@ -139,7 +140,7 @@ body {
   50% { opacity: 1; transform: scale(1.2); }
 }
 
-/* ========== العناصر الزجاجية (شريط العنوان، شريط المستوى، ولكن ليس chips) ========== */
+/* العناصر الزجاجية للرأس وشريط المستوى */
 .header,
 .gamification-bar {
   background: var(--bg-card) !important;
@@ -209,7 +210,7 @@ body {
   flex-wrap: wrap;
 }
 
-/* ========== صور المنتجات: عرض كامل مع padding بسيط وطول تلقائي ========== */
+/* صور المنتجات: عرض كامل مع padding بسيط وطول تلقائي */
 .product-image {
   width: 100%;
   height: auto;
@@ -268,7 +269,13 @@ body {
   color: var(--text-main);
 }
 
-/* تحسين الأزرار في وضع hero-view */
+/* وضع الروية الكبير (Hero) - نضمن أن الأزرار في المنتصف أفقياً */
+.product-container.hero-view .quantity-controls {
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+  margin: 0 auto;
+}
 .product-container.hero-view .btn-qty {
   width: 50px;
   height: 50px;
@@ -324,7 +331,7 @@ body {
   color: var(--text-muted);
 }
 
-/* باقي عناصر الوضعين */
+/* بطاقات وضع الروية الكبير */
 .product-container.hero-view .product-card {
   display: block;
   background: var(--bg-card);
@@ -346,6 +353,7 @@ body {
   margin-bottom: 15px;
 }
 
+/* بطاقات وضع القائمة */
 .product-container.list-view .product-card {
   display: flex;
   align-items: center;
