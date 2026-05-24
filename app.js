@@ -18,11 +18,12 @@ class SoundManager {
         if (savedSound === 'true') this.soundEnabled = true;
         const savedMusic = localStorage.getItem('musicEnabled');
         if (savedMusic === 'true') this.musicEnabled = true;
-        this.updateIcons();
         this.initMusic();
+        this.updateIcons();
     }
     initMusic() {
         try {
+            // رابط موسيقى هادئة (اختر رابطًا مناسبًا)
             this.musicAudio = new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3');
             this.musicAudio.loop = true;
             this.musicAudio.volume = 0.3;
@@ -67,9 +68,17 @@ class SoundManager {
     }
     updateIcons() {
         const soundIcon = document.getElementById('soundIcon');
-        if (soundIcon) soundIcon.className = this.soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute';
+        if (soundIcon) {
+            soundIcon.className = this.soundEnabled ? 'fas fa-volume-up active-sound' : 'fas fa-volume-mute';
+            if (this.soundEnabled) soundIcon.style.color = '#2ecc71';
+            else soundIcon.style.color = 'var(--text-muted)';
+        }
         const musicIcon = document.getElementById('musicIcon');
-        if (musicIcon) musicIcon.className = this.musicEnabled ? 'fas fa-music' : 'fas fa-music-slash';
+        if (musicIcon) {
+            musicIcon.className = this.musicEnabled ? 'fas fa-music active-music' : 'fas fa-music-slash';
+            if (this.musicEnabled) musicIcon.style.color = '#2ecc71';
+            else musicIcon.style.color = 'var(--text-muted)';
+        }
     }
 }
 
@@ -133,7 +142,6 @@ class StorageService {
         const tx = this.db.transaction([API_CACHE_STORE], "readwrite");
         tx.objectStore(API_CACHE_STORE).put({ timestamp: Date.now(), data }, "mainData");
     }
-    // حفظ حالة السلة
     saveCartState(cartItems) {
         localStorage.setItem('savedCart', JSON.stringify(cartItems));
     }
@@ -163,7 +171,7 @@ class LazyImage {
     }
 }
 
-// ==================== بطاقة المنتج مع حفظ الحالة ====================
+// ==================== بطاقة المنتج (مع دعم الحفظ) ====================
 class ProductCard {
     constructor(product, storage, onUpdateTotal, soundManager, initialQty = 0) {
         this.product = product;
@@ -228,11 +236,8 @@ class ProductCard {
             this.updateUI();
             this.element.classList.add('added');
             setTimeout(() => this.element.classList.remove('added'), 300);
-            if (delta > 0 && wasZero && this.onUpdateTotal) {
-                // أول إضافة لهذا المنتج
-                this.onUpdateTotal(this.product.name, true);
-            } else if (this.onUpdateTotal) {
-                this.onUpdateTotal(delta > 0 ? this.product.name : null, false);
+            if (this.onUpdateTotal) {
+                this.onUpdateTotal(delta > 0 ? this.product.name : null, wasZero && delta > 0);
             }
         }
     }
@@ -259,7 +264,7 @@ class ProductsGrid {
         this.sound = soundManager;
         this.cards = [];
         this.currentView = 'hero';
-        this.savedCart = savedCart; // map product name -> quantity
+        this.savedCart = savedCart;
     }
     renderCategory(category, products) {
         const sectionId = `section-${category}`;
@@ -268,7 +273,7 @@ class ProductsGrid {
         const sectionEl = document.getElementById(sectionId);
         products.forEach(product => {
             const savedQty = this.savedCart[product.name] || 0;
-            const card = new ProductCard(product, this.storage, (productName, isFirst) => this.onTotalUpdate(productName, isFirst), this.sound, savedQty);
+            const card = new ProductCard(product, this.storage, (name, first) => this.onTotalUpdate(name, first), this.sound, savedQty);
             const cardElement = card.render();
             sectionEl.appendChild(cardElement);
             this.cards.push({ category, card, sectionElement: sectionEl });
@@ -344,41 +349,33 @@ class CartFooter {
     }
 }
 
-// ==================== رأس التطبيق ====================
+// ==================== رأس التطبيق (بدون زر العرض) ====================
 class AppHeader {
-    constructor(themeBtnId, viewBtnId, searchInputId, soundBtnId, musicBtnId, profileBtnId, cartBtnId, onThemeToggle, onViewToggle, onSearch, onSoundToggle, onMusicToggle, onProfileOpen, onCartClick) {
+    constructor(themeBtnId, searchInputId, soundBtnId, musicBtnId, profileBtnId, settingsBtnId, cartBtnId, onThemeToggle, onSearch, onSoundToggle, onMusicToggle, onProfileOpen, onSettingsOpen, onCartClick) {
         this.themeBtn = document.getElementById(themeBtnId);
-        this.viewBtn = document.getElementById(viewBtnId);
         this.searchInput = document.getElementById(searchInputId);
         this.soundBtn = document.getElementById(soundBtnId);
         this.musicBtn = document.getElementById(musicBtnId);
         this.profileBtn = document.getElementById(profileBtnId);
+        this.settingsBtn = document.getElementById(settingsBtnId);
         this.cartBtn = document.getElementById(cartBtnId);
         this.onThemeToggle = onThemeToggle;
-        this.onViewToggle = onViewToggle;
         this.onSearch = onSearch;
         this.onSoundToggle = onSoundToggle;
         this.onMusicToggle = onMusicToggle;
         this.onProfileOpen = onProfileOpen;
+        this.onSettingsOpen = onSettingsOpen;
         this.onCartClick = onCartClick;
         this.init();
     }
     init() {
         if (this.themeBtn) this.themeBtn.addEventListener('click', () => this.onThemeToggle());
-        if (this.viewBtn) this.viewBtn.addEventListener('click', () => this.onViewToggle());
         if (this.searchInput) this.searchInput.addEventListener('input', (e) => this.onSearch(e.target.value));
         if (this.soundBtn) this.soundBtn.addEventListener('click', () => this.onSoundToggle());
         if (this.musicBtn) this.musicBtn.addEventListener('click', () => this.onMusicToggle());
         if (this.profileBtn) this.profileBtn.addEventListener('click', () => this.onProfileOpen());
+        if (this.settingsBtn) this.settingsBtn.addEventListener('click', () => this.onSettingsOpen());
         if (this.cartBtn) this.cartBtn.addEventListener('click', () => this.onCartClick());
-    }
-    setViewIcon(isList) {
-        if (!this.viewBtn) return;
-        const icon = this.viewBtn.querySelector('i');
-        if (icon) {
-            if (isList) icon.className = 'fas fa-square';
-            else icon.className = 'fas fa-list';
-        }
     }
     updateCartCount(count) {
         const counter = document.getElementById('cartCount');
@@ -417,7 +414,7 @@ class CategoryChips {
     }
 }
 
-// ==================== نظام اللعب مع تأثيرات بصرية ====================
+// ==================== نظام اللعب ====================
 class Gamification {
     constructor(soundManager) {
         this.sound = soundManager;
@@ -446,9 +443,7 @@ class Gamification {
     addXP(amount, productName = '', isFirstAdd = false) {
         this.xp += amount;
         this.showToast(`+${amount} XP`, productName);
-        if (isFirstAdd) {
-            this.showFirstAddEffect();
-        }
+        if (isFirstAdd) this.showFirstAddEffect();
         this.checkLevelUp();
         this.checkBadges();
         this.updateUI();
@@ -461,7 +456,6 @@ class Gamification {
         toast.style.background = '#f39c12';
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 1000);
-        // تأثير على الشريط
         const bar = document.querySelector('.gamification-bar');
         if (bar) {
             bar.classList.add('first-add-effect');
@@ -470,9 +464,7 @@ class Gamification {
     }
     checkLevelUp() {
         let newLevel = 1;
-        while (this.xp >= newLevel * 100) {
-            newLevel++;
-        }
+        while (this.xp >= newLevel * 100) newLevel++;
         if (newLevel > this.level) {
             this.level = newLevel;
             this.sound.playLevelUp();
@@ -522,8 +514,7 @@ class Gamification {
         if (levelSpan) levelSpan.innerText = this.level;
         if (progressFill) {
             const xpInCurrentLevel = this.xp % 100;
-            const percent = (xpInCurrentLevel / 100) * 100;
-            progressFill.style.width = `${percent}%`;
+            progressFill.style.width = `${(xpInCurrentLevel / 100) * 100}%`;
         }
         this.updateProfileModal();
     }
@@ -557,10 +548,7 @@ class Gamification {
         const badgesList = document.getElementById('profileBadgesList');
         if (profileLevel) profileLevel.innerText = this.level;
         if (profileXP) profileXP.innerText = this.xp;
-        if (profileBar) {
-            const percent = (this.xp % 100) / 100 * 100;
-            profileBar.style.width = `${percent}%`;
-        }
+        if (profileBar) profileBar.style.width = `${(this.xp % 100) / 100 * 100}%`;
         if (badgesList) {
             badgesList.innerHTML = '';
             if (this.badges.length === 0) {
@@ -591,78 +579,108 @@ class App {
         this.categoryChips = null;
         this.fullData = null;
         this.lastTotalQty = 0;
-        this.savedCart = {}; // سيتم تحميله من localStorage
+        this.savedCart = {};
         this.init();
     }
     async init() {
         await this.storage.init();
         this.loadSavedCart();
         this.game = new Gamification(this.soundManager);
-        this.productsGrid = new ProductsGrid('main-container', this.storage, (productName, isFirst) => {
-            this.updateTotal(productName, isFirst);
-        }, this.soundManager, this.savedCart);
+        this.productsGrid = new ProductsGrid('main-container', this.storage, (name, first) => this.updateTotal(name, first), this.soundManager, this.savedCart);
         this.cartFooter = new CartFooter('footer-cart', 'grand-total', () => this.sendWhatsApp());
         this.header = new AppHeader(
-            'themeToggleBtn', 'viewToggleBtn', 'search-input', 'soundToggleBtn', 'musicToggleBtn', 'profileBtn', 'cartIconBtn',
+            'themeToggleBtn', 'search-input', 'soundToggleBtn', 'musicToggleBtn', 'profileBtn', 'settingsBtn', 'cartIconBtn',
             () => this.toggleTheme(),
-            () => this.toggleView(),
             (query) => this.productsGrid.filterBySearch(query),
             () => this.toggleSound(),
             () => this.toggleMusic(),
             () => this.openProfileModal(),
+            () => this.openSettingsModal(),
             () => this.scrollToCart()
         );
         this.categoryChips = new CategoryChips('category-chips', (cat) => this.onCategorySelected(cat));
-        this.setupModal();
+        this.setupModals();
         const cachedData = await this.storage.getApiCache();
         if (cachedData) this.renderFullData(cachedData);
         this.fetchFreshData();
     }
     loadSavedCart() {
         const saved = localStorage.getItem('savedCart');
-        if (saved) {
-            this.savedCart = JSON.parse(saved);
-        } else {
-            this.savedCart = {};
-        }
+        if (saved) this.savedCart = JSON.parse(saved);
+        else this.savedCart = {};
     }
     saveCart() {
         if (this.productsGrid) {
-            const cartMap = this.productsGrid.getCartMap();
-            localStorage.setItem('savedCart', JSON.stringify(cartMap));
+            localStorage.setItem('savedCart', JSON.stringify(this.productsGrid.getCartMap()));
         }
     }
-    setupModal() {
-        const modal = document.getElementById('profileModal');
-        const closeBtn = document.querySelector('.modal-close');
-        if (closeBtn) {
-            closeBtn.onclick = () => modal.style.display = 'none';
-        }
+    setupModals() {
+        const profileModal = document.getElementById('profileModal');
+        const settingsModal = document.getElementById('settingsModal');
+        const closeProfile = profileModal?.querySelector('.modal-close');
+        const closeSettings = settingsModal?.querySelector('.settings-close');
+        if (closeProfile) closeProfile.onclick = () => profileModal.style.display = 'none';
+        if (closeSettings) closeSettings.onclick = () => settingsModal.style.display = 'none';
         window.onclick = (event) => {
-            if (event.target === modal) modal.style.display = 'none';
+            if (event.target === profileModal) profileModal.style.display = 'none';
+            if (event.target === settingsModal) settingsModal.style.display = 'none';
         };
+        // إعدادات الأزرار داخل مودال الإعدادات
+        const settingsSoundBtn = document.getElementById('settingsSoundBtn');
+        const settingsMusicBtn = document.getElementById('settingsMusicBtn');
+        const settingsViewBtn = document.getElementById('settingsViewBtn');
+        if (settingsSoundBtn) {
+            settingsSoundBtn.innerText = this.soundManager.soundEnabled ? 'إيقاف' : 'تفعيل';
+            settingsSoundBtn.onclick = () => {
+                this.toggleSound();
+                settingsSoundBtn.innerText = this.soundManager.soundEnabled ? 'إيقاف' : 'تفعيل';
+            };
+        }
+        if (settingsMusicBtn) {
+            settingsMusicBtn.innerText = this.soundManager.musicEnabled ? 'إيقاف' : 'تفعيل';
+            settingsMusicBtn.onclick = () => {
+                this.toggleMusic();
+                settingsMusicBtn.innerText = this.soundManager.musicEnabled ? 'إيقاف' : 'تفعيل';
+            };
+        }
+        if (settingsViewBtn) {
+            settingsViewBtn.innerText = this.productsGrid?.currentView === 'hero' ? 'وضع القائمة' : 'وضع البطاقات';
+            settingsViewBtn.onclick = () => {
+                this.toggleView();
+                settingsViewBtn.innerText = this.productsGrid?.currentView === 'hero' ? 'وضع القائمة' : 'وضع البطاقات';
+            };
+        }
     }
     openProfileModal() {
         this.game.updateProfileModal();
         const modal = document.getElementById('profileModal');
         if (modal) modal.style.display = 'block';
     }
+    openSettingsModal() {
+        const modal = document.getElementById('settingsModal');
+        if (modal) modal.style.display = 'block';
+        // تحديث نصوص الأزرار
+        const settingsSoundBtn = document.getElementById('settingsSoundBtn');
+        const settingsMusicBtn = document.getElementById('settingsMusicBtn');
+        const settingsViewBtn = document.getElementById('settingsViewBtn');
+        if (settingsSoundBtn) settingsSoundBtn.innerText = this.soundManager.soundEnabled ? 'إيقاف' : 'تفعيل';
+        if (settingsMusicBtn) settingsMusicBtn.innerText = this.soundManager.musicEnabled ? 'إيقاف' : 'تفعيل';
+        if (settingsViewBtn) settingsViewBtn.innerText = this.productsGrid?.currentView === 'hero' ? 'وضع القائمة' : 'وضع البطاقات';
+    }
     async fetchFreshData() {
         try {
             const response = await fetch(API_URL);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
-            if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+            if (!data || typeof data !== 'object' || Object.keys(data).length === 0)
                 throw new Error("البيانات فارغة أو غير صالحة");
-            }
             if (!this.fullData) this.renderFullData(data);
             await this.storage.saveApiCache(data);
         } catch (err) {
-            console.error('❌ خطأ:', err);
+            console.error(err);
             const loader = document.getElementById('loader');
-            if (loader && !this.fullData) {
-                loader.innerHTML = `❌ فشل التحميل: ${err.message}<br><small>تأكد من اتصال الإنترنت وأن API يعمل</small>`;
-            } else if (!this.fullData) {
+            if (loader && !this.fullData) loader.innerHTML = `❌ فشل التحميل: ${err.message}<br><small>تأكد من اتصال الإنترنت وأن API يعمل</small>`;
+            else if (!this.fullData) {
                 const container = document.getElementById('main-container');
                 if (container) container.innerHTML = `<div class="loader">❌ فشل التحميل: ${err.message}</div>`;
             }
@@ -704,13 +722,12 @@ class App {
             this.game.addXP(gained, productName || 'منتج', isFirst);
         }
         this.lastTotalQty = totalQty;
-        this.saveCart(); // حفظ حالة السلة بعد كل تغيير
+        this.saveCart();
     }
     scrollToCart() {
         const footer = document.getElementById('footer-cart');
         if (footer) {
             footer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            footer.style.transition = 'box-shadow 0.3s';
             footer.style.boxShadow = '0 0 0 2px var(--primary)';
             setTimeout(() => footer.style.boxShadow = '', 500);
         }
@@ -729,7 +746,6 @@ class App {
         message += `💰 *الإجمالي النهائي: ${totalSpan ? totalSpan.innerText : '0'} ل.س*`;
         window.open(`https://wa.me/${TARGET_NUMBER}?text=${encodeURIComponent(message)}`);
         this.game.addXP(20, 'إتمام الطلب');
-        // لا نمسح السلة بعد الإرسال، يمكن للمستخدم إعادة الإرسال
     }
     toggleTheme() {
         const body = document.body;
@@ -740,33 +756,31 @@ class App {
         const dayElements = document.querySelector('.day-elements');
         const nightElements = document.querySelector('.night-elements');
         if (dayElements && nightElements) {
-            if (isDark) {
-                dayElements.style.display = 'none';
-                nightElements.style.display = 'block';
-            } else {
-                dayElements.style.display = 'block';
-                nightElements.style.display = 'none';
-            }
+            if (isDark) { dayElements.style.display = 'none'; nightElements.style.display = 'block'; }
+            else { dayElements.style.display = 'block'; nightElements.style.display = 'none'; }
         }
     }
     toggleView() {
-        const isListView = this.productsGrid.currentView === 'list';
-        this.productsGrid.setView(isListView ? 'hero' : 'list');
-        this.header.setViewIcon(!isListView);
+        const newView = this.productsGrid.currentView === 'hero' ? 'list' : 'hero';
+        this.productsGrid.setView(newView);
+        // نحدّث النص في زر الإعدادات أيضاً
+        const settingsViewBtn = document.getElementById('settingsViewBtn');
+        if (settingsViewBtn) settingsViewBtn.innerText = newView === 'hero' ? 'وضع القائمة' : 'وضع البطاقات';
         const searchVal = document.getElementById('search-input');
         if (searchVal) this.productsGrid.filterBySearch(searchVal.value);
     }
     toggleSound() {
         this.soundManager.toggleSound();
+        const settingsSoundBtn = document.getElementById('settingsSoundBtn');
+        if (settingsSoundBtn) settingsSoundBtn.innerText = this.soundManager.soundEnabled ? 'إيقاف' : 'تفعيل';
     }
     toggleMusic() {
         this.soundManager.toggleMusic();
+        const settingsMusicBtn = document.getElementById('settingsMusicBtn');
+        if (settingsMusicBtn) settingsMusicBtn.innerText = this.soundManager.musicEnabled ? 'إيقاف' : 'تفعيل';
     }
 }
 
 // بدء التطبيق
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => new App());
-} else {
-    new App();
-}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => new App());
+else new App();
