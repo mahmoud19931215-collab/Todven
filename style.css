@@ -74,12 +74,11 @@ body {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
-/* في الوضع الليلي تخفى الشمس ويظهر القمر */
 [data-theme="dark"] .sun {
   display: none;
 }
 
-/* ========== الغيوم (حركة سلسة وأسرع قليلاً) ========== */
+/* ========== الغيوم ========== */
 .cloud {
   position: absolute;
   background: rgba(255, 255, 255, 0.9);
@@ -202,7 +201,7 @@ body {
   50% { opacity: 1; transform: scale(1.2); }
 }
 
-/* ========== رأس التطبيق (بدون أزرار غير ضرورية) ========== */
+/* ========== رأس التطبيق ========== */
 .header {
   position: sticky;
   top: 0;
@@ -320,7 +319,7 @@ body {
   justify-content: center;
 }
 
-/* ========== أزرار التصنيفات (Chips) ========== */
+/* ========== أزرار التصنيفات ========== */
 .chips-wrapper {
   display: flex;
   overflow-x: auto;
@@ -356,7 +355,7 @@ body {
   color: white;
 }
 
-/* ========== شريط تقدم تحميل الصور ========== */
+/* ========== شريط تقدم الصور ========== */
 .image-progress-bar {
   margin: 0 15px 10px 15px;
   height: 4px;
@@ -605,7 +604,7 @@ body {
   cursor: pointer;
 }
 
-/* ========== إضافة منتج (تأثير بسيط) ========== */
+/* ========== تأثير إضافة منتج ========== */
 .product-card.added {
   animation: pop 0.3s ease;
 }
@@ -636,7 +635,7 @@ body {
   font-size: 18px;
 }
 
-/* ========== دعم الوضع الأفقي (Landscape) ========== */
+/* ========== دعم الوضع الأفقي ========== */
 @media (orientation: landscape) and (min-width: 768px) {
   .product-container.hero-view {
     display: grid;
