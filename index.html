@@ -31,10 +31,11 @@
 
     <!-- رأس التطبيق -->
     <div class="header">
-        <button class="icon-btn" id="soundToggleBtn" title="تشغيل الصوت"><i id="soundIcon" class="fas fa-volume-mute"></i></button>
+        <button class="icon-btn" id="soundToggleBtn" title="تفعيل الصوت"><i id="soundIcon" class="fas fa-volume-mute"></i></button>
+        <button class="icon-btn" id="musicToggleBtn" title="موسيقى الخلفية"><i id="musicIcon" class="fas fa-music"></i></button>
+        <button class="icon-btn" id="profileBtn" title="ملفي الشخصي"><i class="fas fa-user-astronaut"></i></button>
         <button class="icon-btn" id="themeToggleBtn"><i id="theme-icon" class="fas fa-moon"></i></button>
         <button class="icon-btn" id="viewToggleBtn"><i id="view-icon" class="fas fa-list"></i></button>
-        <!-- أيقونة السلة مع العداد -->
         <div class="cart-icon-wrapper">
             <button class="icon-btn" id="cartIconBtn" title="عربة التسوق">
                 <i class="fas fa-shopping-cart"></i>
@@ -77,6 +78,34 @@
             <div style="font-size: 18px; font-weight: 800;"><span id="grand-total">0</span> ل.س</div>
         </div>
         <button id="whatsappBtn" class="whatsapp-send">إتمام الطلب <i class="fab fa-whatsapp"></i></button>
+    </div>
+
+    <!-- مودال (نافذة منبثقة) البروفايل -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-close">&times;</span>
+                <h2><i class="fas fa-user-astronaut"></i> ملفي الشخصي</h2>
+            </div>
+            <div class="modal-body">
+                <div class="profile-level">
+                    <div class="profile-avatar">
+                        <i class="fas fa-crown"></i>
+                    </div>
+                    <div class="profile-stats">
+                        <p><strong>المستوى:</strong> <span id="profileLevel">1</span></p>
+                        <p><strong>نقاط الخبرة:</strong> <span id="profileXP">0</span> XP</p>
+                        <div class="profile-progress">
+                            <div class="profile-progress-bar" id="profileProgressBar" style="width:0%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="profile-badges">
+                    <h3>الشارات</h3>
+                    <div id="profileBadgesList" class="badges-list">لا توجد شارات بعد</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="app.js" type="module"></script>
