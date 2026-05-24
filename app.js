@@ -2,107 +2,6 @@
 const TARGET_NUMBER = "963945083365";
 const API_URL = "https://script.google.com/macros/s/AKfycbz8CnO-_aiuboqy7R4kXFA-FQ4uNaLAVc5-_aC-z6txmg2W33wG7c4Igj_NJeKGF-fk/exec";
 
-// ==================== إدارة الصوت والموسيقى (مع رسالة توضيحية) ====================
-class SoundManager {
-    constructor() {
-        this.soundEnabled = false;
-        this.musicEnabled = false;
-        this.musicAudio = null;
-        this.userInteracted = false;
-        this.init();
-    }
-    init() {
-        this.clickSound = () => this.playBeep(440, 0.1);
-        this.levelUpSound = () => this.playBeep(880, 0.3, 600);
-        this.orderSound = () => this.playBeep(660, 0.4, 800);
-        const savedSound = localStorage.getItem('soundEnabled');
-        if (savedSound === 'true') this.soundEnabled = true;
-        const savedMusic = localStorage.getItem('musicEnabled');
-        if (savedMusic === 'true') this.musicEnabled = true;
-        this.initMusic();
-        this.updateIcons();
-        this.setupUserInteraction();
-    }
-    setupUserInteraction() {
-        const showNotice = () => {
-            const notice = document.getElementById('soundNotice');
-            if (notice && !this.userInteracted && (this.soundEnabled || this.musicEnabled)) {
-                notice.style.display = 'block';
-                setTimeout(() => { if(notice) notice.style.display = 'none'; }, 5000);
-            }
-        };
-        const handleInteraction = () => {
-            if (!this.userInteracted) {
-                this.userInteracted = true;
-                const notice = document.getElementById('soundNotice');
-                if (notice) notice.style.display = 'none';
-                if (this.musicEnabled && this.musicAudio) {
-                    this.musicAudio.play().catch(e => console.log("Music autoplay blocked"));
-                }
-            }
-        };
-        document.body.addEventListener('click', handleInteraction);
-        document.body.addEventListener('touchstart', handleInteraction);
-        setTimeout(showNotice, 1000);
-    }
-    initMusic() {
-        try {
-            this.musicAudio = new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3');
-            this.musicAudio.loop = true;
-            this.musicAudio.volume = 0.3;
-        } catch(e) { console.warn("Music not available"); }
-    }
-    playBeep(frequency, duration, delay = 0) {
-        if (!this.soundEnabled) return;
-        try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            const ctx = new AudioContext();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.frequency.value = frequency;
-            gain.gain.value = 0.1;
-            osc.start();
-            gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + duration);
-            osc.stop(ctx.currentTime + duration);
-            setTimeout(() => ctx.close(), duration * 1000 + 500);
-        } catch(e) {}
-    }
-    playClick() { if(this.clickSound) this.clickSound(); }
-    playLevelUp() { if(this.levelUpSound) this.levelUpSound(); }
-    playOrder() { if(this.orderSound) this.orderSound(); }
-    toggleSound() {
-        this.soundEnabled = !this.soundEnabled;
-        localStorage.setItem('soundEnabled', this.soundEnabled);
-        this.updateIcons();
-        return this.soundEnabled;
-    }
-    toggleMusic() {
-        this.musicEnabled = !this.musicEnabled;
-        localStorage.setItem('musicEnabled', this.musicEnabled);
-        if (this.musicEnabled && this.musicAudio && this.userInteracted) {
-            this.musicAudio.play().catch(e => console.log("Music autoplay blocked"));
-        } else if (this.musicAudio) {
-            this.musicAudio.pause();
-        }
-        this.updateIcons();
-        return this.musicEnabled;
-    }
-    updateIcons() {
-        const soundIcon = document.getElementById('soundIcon');
-        if (soundIcon) {
-            soundIcon.className = this.soundEnabled ? 'fas fa-volume-up active-sound' : 'fas fa-volume-mute';
-            soundIcon.style.color = this.soundEnabled ? '#2ecc71' : 'var(--text-muted)';
-        }
-        const musicIcon = document.getElementById('musicIcon');
-        if (musicIcon) {
-            musicIcon.className = this.musicEnabled ? 'fas fa-music active-music' : 'fas fa-music-slash';
-            musicIcon.style.color = this.musicEnabled ? '#2ecc71' : 'var(--text-muted)';
-        }
-    }
-}
-
 // ==================== خدمة التخزين باستخدام Dexie.js ====================
 class StorageService {
     constructor() {
@@ -207,13 +106,12 @@ class LazyImage {
     }
 }
 
-// ==================== بطاقة المنتج (مع دعم الحفظ) ====================
+// ==================== بطاقة المنتج ====================
 class ProductCard {
-    constructor(product, storage, onUpdateTotal, soundManager, initialQty = 0, onImageLoad) {
+    constructor(product, storage, onUpdateTotal, initialQty = 0, onImageLoad) {
         this.product = product;
         this.storage = storage;
         this.onUpdateTotal = onUpdateTotal;
-        this.sound = soundManager;
         this.quantity = initialQty;
         this.element = null;
         this.qtyInput = null;
@@ -247,8 +145,8 @@ class ProductCard {
         this.subtotalRow = cardDiv.querySelector('.item-subtotal');
         const incBtn = cardDiv.querySelector('.inc-qty');
         const decBtn = cardDiv.querySelector('.dec-qty');
-        incBtn.addEventListener('click', () => { this.sound.playClick(); this.updateQuantity(1); });
-        decBtn.addEventListener('click', () => { this.sound.playClick(); this.updateQuantity(-1); });
+        incBtn.addEventListener('click', () => { this.updateQuantity(1); });
+        decBtn.addEventListener('click', () => { this.updateQuantity(-1); });
         const imgEl = cardDiv.querySelector(`#${uniqueId}`);
         LazyImage.render(imgEl, this.product.imageUrl, this.storage, this.onImageLoad);
         this.updateUI();
@@ -292,13 +190,12 @@ class ProductCard {
     }
 }
 
-// ==================== شبكة المنتجات (مع شريط تقدم الصور) ====================
+// ==================== شبكة المنتجات ====================
 class ProductsGrid {
-    constructor(containerId, storage, onTotalUpdate, soundManager, savedCart) {
+    constructor(containerId, storage, onTotalUpdate, savedCart) {
         this.container = document.getElementById(containerId);
         this.storage = storage;
         this.onTotalUpdate = onTotalUpdate;
-        this.sound = soundManager;
         this.cards = [];
         this.currentView = 'hero';
         this.savedCart = savedCart;
@@ -323,7 +220,7 @@ class ProductsGrid {
         const sectionEl = document.getElementById(sectionId);
         products.forEach(product => {
             const savedQty = this.savedCart[product.name] || 0;
-            const card = new ProductCard(product, this.storage, (name, first) => this.onTotalUpdate(name, first), this.sound, savedQty, () => this.imageLoaded());
+            const card = new ProductCard(product, this.storage, (name, first) => this.onTotalUpdate(name, first), savedQty, () => this.imageLoaded());
             const cardElement = card.render();
             sectionEl.appendChild(cardElement);
             this.cards.push({ category, card, sectionElement: sectionEl });
@@ -410,23 +307,15 @@ class CartFooter {
     }
 }
 
-// ==================== رأس التطبيق (مع دعم زر مسح البحث) ====================
+// ==================== رأس التطبيق ====================
 class AppHeader {
-    constructor(themeBtnId, searchInputId, soundBtnId, musicBtnId, profileBtnId, settingsBtnId, cartBtnId, clearSearchBtnId, onThemeToggle, onSearch, onSoundToggle, onMusicToggle, onProfileOpen, onSettingsOpen, onCartClick) {
+    constructor(themeBtnId, searchInputId, clearSearchBtnId, onThemeToggle, onSearch, onCartClick) {
         this.themeBtn = document.getElementById(themeBtnId);
         this.searchInput = document.getElementById(searchInputId);
         this.clearSearchBtn = document.getElementById(clearSearchBtnId);
-        this.soundBtn = document.getElementById(soundBtnId);
-        this.musicBtn = document.getElementById(musicBtnId);
-        this.profileBtn = document.getElementById(profileBtnId);
-        this.settingsBtn = document.getElementById(settingsBtnId);
-        this.cartBtn = document.getElementById(cartBtnId);
+        this.cartBtn = document.getElementById('cartIconBtn');
         this.onThemeToggle = onThemeToggle;
         this.onSearch = onSearch;
-        this.onSoundToggle = onSoundToggle;
-        this.onMusicToggle = onMusicToggle;
-        this.onProfileOpen = onProfileOpen;
-        this.onSettingsOpen = onSettingsOpen;
         this.onCartClick = onCartClick;
         this.init();
     }
@@ -435,10 +324,6 @@ class AppHeader {
         if (this.searchInput) this.searchInput.addEventListener('input', (e) => this.onSearch(e.target.value));
         if (this.clearSearchBtn) this.clearSearchBtn.addEventListener('click', () => { this.searchInput.value = ''; this.onSearch(''); this.clearSearchBtn.style.display = 'none'; });
         if (this.searchInput) this.searchInput.addEventListener('input', () => { if(this.clearSearchBtn) this.clearSearchBtn.style.display = this.searchInput.value ? 'flex' : 'none'; });
-        if (this.soundBtn) this.soundBtn.addEventListener('click', () => this.onSoundToggle());
-        if (this.musicBtn) this.musicBtn.addEventListener('click', () => this.onMusicToggle());
-        if (this.profileBtn) this.profileBtn.addEventListener('click', () => this.onProfileOpen());
-        if (this.settingsBtn) this.settingsBtn.addEventListener('click', () => this.onSettingsOpen());
         if (this.cartBtn) this.cartBtn.addEventListener('click', () => this.onCartClick());
     }
     updateCartCount(count) {
@@ -478,165 +363,10 @@ class CategoryChips {
     }
 }
 
-// ==================== نظام اللعب ====================
-class Gamification {
-    constructor(soundManager) {
-        this.sound = soundManager;
-        this.xp = 0;
-        this.level = 1;
-        this.badges = [];
-        this.loadFromStorage();
-        this.updateUI();
-    }
-    loadFromStorage() {
-        const saved = localStorage.getItem('gameStats');
-        if (saved) {
-            const data = JSON.parse(saved);
-            this.xp = data.xp || 0;
-            this.level = data.level || 1;
-            this.badges = data.badges || [];
-        }
-    }
-    saveToStorage() {
-        localStorage.setItem('gameStats', JSON.stringify({
-            xp: this.xp,
-            level: this.level,
-            badges: this.badges
-        }));
-    }
-    addXP(amount, productName = '', isFirstAdd = false) {
-        this.xp += amount;
-        this.showToast(`+${amount} XP`, productName);
-        if (isFirstAdd) this.showFirstAddEffect();
-        this.checkLevelUp();
-        this.checkBadges();
-        this.updateUI();
-        this.saveToStorage();
-    }
-    showFirstAddEffect() {
-        const toast = document.createElement('div');
-        toast.className = 'toast-points';
-        toast.innerHTML = '🎉 أول إضافة! 🎉';
-        toast.style.background = '#f39c12';
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 1000);
-        const bar = document.querySelector('.gamification-bar');
-        if (bar) {
-            bar.classList.add('first-add-effect');
-            setTimeout(() => bar.classList.remove('first-add-effect'), 500);
-        }
-    }
-    checkLevelUp() {
-        let newLevel = 1;
-        while (this.xp >= newLevel * 100) newLevel++;
-        if (newLevel > this.level) {
-            this.level = newLevel;
-            this.sound.playLevelUp();
-            this.showToast(`🎉 رفعت لمستوى ${this.level} ! 🎉`, '', 2000);
-            this.showLevelUpEffect();
-        }
-    }
-    showLevelUpEffect() {
-        const levelSpan = document.getElementById('levelNum');
-        if (levelSpan) {
-            levelSpan.classList.add('level-up-animation');
-            setTimeout(() => levelSpan.classList.remove('level-up-animation'), 600);
-        }
-        const trophy = document.querySelector('.level-info i');
-        if (trophy) {
-            trophy.style.animation = 'none';
-            setTimeout(() => trophy.style.animation = 'levelUpEffect 0.6s', 10);
-        }
-    }
-    checkBadges() {
-        if (this.xp >= 5 && !this.badges.includes('starter')) {
-            this.badges.push('starter');
-            this.showToast('🏅 شارة: البداية القوية', '', 2000);
-        }
-        if (this.xp >= 50 && !this.badges.includes('warrior')) {
-            this.badges.push('warrior');
-            this.showToast('⚔️ شارة: المحارب', '', 2000);
-        }
-        if (this.xp >= 150 && !this.badges.includes('legend')) {
-            this.badges.push('legend');
-            this.showToast('👑 شارة: الأسطوري', '', 2000);
-        }
-        this.updateBadgesUI();
-    }
-    showToast(msg, productName = '', duration = 1200) {
-        const toast = document.createElement('div');
-        toast.className = 'toast-points';
-        toast.innerHTML = productName ? `✨ ${productName}<br>${msg}` : msg;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), duration);
-    }
-    updateUI() {
-        const xpSpan = document.getElementById('xpPoints');
-        const levelSpan = document.getElementById('levelNum');
-        const progressFill = document.getElementById('xpProgress');
-        if (xpSpan) xpSpan.innerText = this.xp;
-        if (levelSpan) levelSpan.innerText = this.level;
-        if (progressFill) {
-            const xpInCurrentLevel = this.xp % 100;
-            progressFill.style.width = `${(xpInCurrentLevel / 100) * 100}%`;
-        }
-        this.updateProfileModal();
-    }
-    updateBadgesUI() {
-        const badgeArea = document.getElementById('badgeArea');
-        if (!badgeArea) return;
-        badgeArea.innerHTML = '';
-        if (this.badges.includes('starter')) {
-            const badge = document.createElement('div');
-            badge.className = 'badge';
-            badge.innerHTML = '<i class="fas fa-seedling"></i> مبتدئ';
-            badgeArea.appendChild(badge);
-        }
-        if (this.badges.includes('warrior')) {
-            const badge = document.createElement('div');
-            badge.className = 'badge';
-            badge.innerHTML = '<i class="fas fa-shield-alt"></i> محارب';
-            badgeArea.appendChild(badge);
-        }
-        if (this.badges.includes('legend')) {
-            const badge = document.createElement('div');
-            badge.className = 'badge';
-            badge.innerHTML = '<i class="fas fa-crown"></i> أسطوري';
-            badgeArea.appendChild(badge);
-        }
-    }
-    updateProfileModal() {
-        const profileLevel = document.getElementById('profileLevel');
-        const profileXP = document.getElementById('profileXP');
-        const profileBar = document.getElementById('profileProgressBar');
-        const badgesList = document.getElementById('profileBadgesList');
-        if (profileLevel) profileLevel.innerText = this.level;
-        if (profileXP) profileXP.innerText = this.xp;
-        if (profileBar) profileBar.style.width = `${(this.xp % 100) / 100 * 100}%`;
-        if (badgesList) {
-            badgesList.innerHTML = '';
-            if (this.badges.length === 0) {
-                badgesList.innerHTML = 'لا توجد شارات بعد';
-            } else {
-                this.badges.forEach(b => {
-                    const badgeDiv = document.createElement('div');
-                    badgeDiv.className = 'badge-item';
-                    if (b === 'starter') badgeDiv.innerHTML = '<i class="fas fa-seedling"></i> مبتدئ';
-                    else if (b === 'warrior') badgeDiv.innerHTML = '<i class="fas fa-shield-alt"></i> محارب';
-                    else if (b === 'legend') badgeDiv.innerHTML = '<i class="fas fa-crown"></i> أسطوري';
-                    badgesList.appendChild(badgeDiv);
-                });
-            }
-        }
-    }
-}
-
 // ==================== التطبيق الرئيسي ====================
 class App {
     constructor() {
-        this.soundManager = new SoundManager();
         this.storage = new StorageService();
-        this.game = null;
         this.productsGrid = null;
         this.cartFooter = null;
         this.header = null;
@@ -649,21 +379,16 @@ class App {
     async init() {
         await this.storage.init();
         this.loadSavedCart();
-        this.game = new Gamification(this.soundManager);
-        this.productsGrid = new ProductsGrid('main-container', this.storage, (name, first) => this.updateTotal(name, first), this.soundManager, this.savedCart);
+        this.productsGrid = new ProductsGrid('main-container', this.storage, (name, first) => this.updateTotal(name, first), this.savedCart);
         this.cartFooter = new CartFooter('footer-cart', 'grand-total', () => this.sendWhatsApp());
         this.header = new AppHeader(
-            'themeToggleBtn', 'search-input', 'soundToggleBtn', 'musicToggleBtn', 'profileBtn', 'settingsBtn', 'cartIconBtn', 'clearSearchBtn',
+            'themeToggleBtn', 'search-input', 'clearSearchBtn',
             () => this.toggleTheme(),
             (query) => this.productsGrid.filterBySearch(query),
-            () => this.toggleSound(),
-            () => this.toggleMusic(),
-            () => this.openProfileModal(),
-            () => this.openSettingsModal(),
             () => this.scrollToCart()
         );
         this.categoryChips = new CategoryChips('category-chips', (cat) => this.onCategorySelected(cat));
-        this.setupModals();
+
         // شريط تقدم الصور
         const progressBar = document.getElementById('imageProgressBar');
         const progressFill = document.querySelector('.image-progress-fill');
@@ -677,11 +402,13 @@ class App {
                 }
             });
         }
+
         // إظهار skeleton أولاً
         const skeleton = document.getElementById('skeletonContainer');
         const productsContent = document.getElementById('productsContent');
         if (skeleton) skeleton.style.display = 'grid';
         if (productsContent) productsContent.style.display = 'none';
+
         const cachedData = await this.storage.getApiCache();
         if (cachedData) this.renderFullData(cachedData);
         this.fetchFreshData();
@@ -709,67 +436,6 @@ class App {
         if (this.productsGrid) {
             localStorage.setItem('savedCart', JSON.stringify(this.productsGrid.getCartMap()));
         }
-    }
-    setupModals() {
-        const profileModal = document.getElementById('profileModal');
-        const settingsModal = document.getElementById('settingsModal');
-        const closeProfile = profileModal?.querySelector('.modal-close');
-        const closeSettings = settingsModal?.querySelector('.settings-close');
-        if (closeProfile) closeProfile.onclick = () => profileModal.style.display = 'none';
-        if (closeSettings) closeSettings.onclick = () => settingsModal.style.display = 'none';
-        window.onclick = (event) => {
-            if (event.target === profileModal) profileModal.style.display = 'none';
-            if (event.target === settingsModal) settingsModal.style.display = 'none';
-        };
-        const settingsSoundBtn = document.getElementById('settingsSoundBtn');
-        const settingsMusicBtn = document.getElementById('settingsMusicBtn');
-        const settingsViewBtn = document.getElementById('settingsViewBtn');
-        const clearCacheBtn = document.getElementById('clearCacheBtn');
-        if (settingsSoundBtn) {
-            settingsSoundBtn.innerText = this.soundManager.soundEnabled ? 'إيقاف' : 'تفعيل';
-            settingsSoundBtn.onclick = () => {
-                this.toggleSound();
-                settingsSoundBtn.innerText = this.soundManager.soundEnabled ? 'إيقاف' : 'تفعيل';
-            };
-        }
-        if (settingsMusicBtn) {
-            settingsMusicBtn.innerText = this.soundManager.musicEnabled ? 'إيقاف' : 'تفعيل';
-            settingsMusicBtn.onclick = () => {
-                this.toggleMusic();
-                settingsMusicBtn.innerText = this.soundManager.musicEnabled ? 'إيقاف' : 'تفعيل';
-            };
-        }
-        if (settingsViewBtn) {
-            settingsViewBtn.innerText = this.productsGrid?.currentView === 'hero' ? 'وضع القائمة' : 'وضع البطاقات';
-            settingsViewBtn.onclick = () => {
-                this.toggleView();
-                settingsViewBtn.innerText = this.productsGrid?.currentView === 'hero' ? 'وضع القائمة' : 'وضع البطاقات';
-            };
-        }
-        if (clearCacheBtn) {
-            clearCacheBtn.onclick = async () => {
-                if (confirm('هل أنت متأكد من مسح جميع الصور المخزنة مؤقتاً؟ سيتم إعادة تحميلها عند الحاجة.')) {
-                    await this.storage.clearAllCache();
-                    alert('تم مسح ذاكرة التخزين المؤقت بنجاح');
-                    location.reload();
-                }
-            };
-        }
-    }
-    openProfileModal() {
-        this.game.updateProfileModal();
-        const modal = document.getElementById('profileModal');
-        if (modal) modal.style.display = 'block';
-    }
-    openSettingsModal() {
-        const modal = document.getElementById('settingsModal');
-        if (modal) modal.style.display = 'block';
-        const settingsSoundBtn = document.getElementById('settingsSoundBtn');
-        const settingsMusicBtn = document.getElementById('settingsMusicBtn');
-        const settingsViewBtn = document.getElementById('settingsViewBtn');
-        if (settingsSoundBtn) settingsSoundBtn.innerText = this.soundManager.soundEnabled ? 'إيقاف' : 'تفعيل';
-        if (settingsMusicBtn) settingsMusicBtn.innerText = this.soundManager.musicEnabled ? 'إيقاف' : 'تفعيل';
-        if (settingsViewBtn) settingsViewBtn.innerText = this.productsGrid?.currentView === 'hero' ? 'وضع القائمة' : 'وضع البطاقات';
     }
     async fetchFreshData() {
         try {
@@ -799,22 +465,16 @@ class App {
         const productsContent = document.getElementById('productsContent');
         if (skeleton) skeleton.style.display = 'none';
         if (productsContent) productsContent.style.display = 'block';
-        // نقل حاوية المنتجات الفعلية إلى داخل productsContent
+
+        // نقل حاوية المنتجات إلى داخل productsContent إذا لزم الأمر
         const mainContainer = document.getElementById('main-container');
         if (mainContainer && productsContent && !productsContent.contains(mainContainer)) {
-            // بالفعل main-container هو نفسه الحاوية، لكننا أضفنا productsContent كغلاف، نحتاج لتجنب الازدواجية
-            // الحل: نجعل main-container هو نفسه productsContent أو نستخدم productsContent كحاوية فعلية
-            // لكن ProductsGrid يستخدم main-container. الأسهل: تعديل ProductsGrid لاستخدام productsContent
-            // بدلاً من ذلك، سنقوم بنقل المحتوى من main-container إلى productsContent
-            if (mainContainer.id === 'main-container') {
-                const temp = document.createElement('div');
-                while(mainContainer.firstChild) temp.appendChild(mainContainer.firstChild);
-                productsContent.appendChild(temp);
-                mainContainer.style.display = 'none';
-            }
+            const temp = document.createElement('div');
+            while(mainContainer.firstChild) temp.appendChild(mainContainer.firstChild);
+            productsContent.appendChild(temp);
+            mainContainer.style.display = 'none';
         }
         for (const category in data) {
-            // التحقق من صحة كل منتج (صورة افتراضية، stock افتراضي)
             const validProducts = data[category].map(p => ({
                 ...p,
                 imageUrl: p.imageUrl && p.imageUrl.startsWith('http') ? p.imageUrl : 'https://via.placeholder.com/300?text=No+Image',
@@ -845,10 +505,6 @@ class App {
         }
         this.cartFooter.updateTotal(total);
         if (this.header) this.header.updateCartCount(totalQty);
-        if (this.lastTotalQty !== totalQty && totalQty > this.lastTotalQty) {
-            const gained = (totalQty - this.lastTotalQty) * 5;
-            this.game.addXP(gained, productName || 'منتج', isFirst);
-        }
         this.lastTotalQty = totalQty;
         this.saveCart();
     }
@@ -863,7 +519,6 @@ class App {
     sendWhatsApp() {
         const items = this.productsGrid.getAllCartItems();
         if (items.length === 0) return;
-        this.soundManager.playOrder();
         let message = "";
         for (const item of items) {
             const sub = item.quantity * item.price;
@@ -873,7 +528,6 @@ class App {
         const totalSpan = document.getElementById('grand-total');
         message += `💰 *الإجمالي النهائي: ${totalSpan ? totalSpan.innerText : '0'} ل.س*`;
         window.open(`https://wa.me/${TARGET_NUMBER}?text=${encodeURIComponent(message)}`);
-        this.game.addXP(20, 'إتمام الطلب');
     }
     toggleTheme() {
         const body = document.body;
@@ -888,37 +542,15 @@ class App {
             else { dayElements.style.display = 'block'; nightElements.style.display = 'none'; }
         }
     }
-    toggleView() {
-        const newView = this.productsGrid.currentView === 'hero' ? 'list' : 'hero';
-        this.productsGrid.setView(newView);
-        const settingsViewBtn = document.getElementById('settingsViewBtn');
-        if (settingsViewBtn) settingsViewBtn.innerText = newView === 'hero' ? 'وضع القائمة' : 'وضع البطاقات';
-        const searchVal = document.getElementById('search-input');
-        if (searchVal) this.productsGrid.filterBySearch(searchVal.value);
-    }
-    toggleSound() {
-        this.soundManager.toggleSound();
-        const settingsSoundBtn = document.getElementById('settingsSoundBtn');
-        if (settingsSoundBtn) settingsSoundBtn.innerText = this.soundManager.soundEnabled ? 'إيقاف' : 'تفعيل';
-    }
-    toggleMusic() {
-        this.soundManager.toggleMusic();
-        const settingsMusicBtn = document.getElementById('settingsMusicBtn');
-        if (settingsMusicBtn) settingsMusicBtn.innerText = this.soundManager.musicEnabled ? 'إيقاف' : 'تفعيل';
-    }
-}
-
-// تسجيل Service Worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then(reg => {
-      console.log('SW registered: ', reg);
-    }).catch(err => {
-      console.log('SW registration failed: ', err);
-    });
-  });
 }
 
 // بدء التطبيق
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => new App());
 else new App();
+
+// تسجيل Service Worker (إذا أردت)
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
+    });
+}
