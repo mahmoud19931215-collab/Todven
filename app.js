@@ -2,12 +2,13 @@
 const TARGET_NUMBER = "963945083365";
 const API_URL = "https://script.google.com/macros/s/AKfycbz8CnO-_aiuboqy7R4kXFA-FQ4uNaLAVc5-_aC-z6txmg2W33wG7c4Igj_NJeKGF-fk/exec";
 
-// ==================== إدارة الصوت والموسيقى ====================
+// ==================== إدارة الصوت والموسيقى (مع رسالة توضيحية) ====================
 class SoundManager {
     constructor() {
         this.soundEnabled = false;
         this.musicEnabled = false;
         this.musicAudio = null;
+        this.userInteracted = false;
         this.init();
     }
     init() {
@@ -20,10 +21,32 @@ class SoundManager {
         if (savedMusic === 'true') this.musicEnabled = true;
         this.initMusic();
         this.updateIcons();
+        this.setupUserInteraction();
+    }
+    setupUserInteraction() {
+        const showNotice = () => {
+            const notice = document.getElementById('soundNotice');
+            if (notice && !this.userInteracted && (this.soundEnabled || this.musicEnabled)) {
+                notice.style.display = 'block';
+                setTimeout(() => { if(notice) notice.style.display = 'none'; }, 5000);
+            }
+        };
+        const handleInteraction = () => {
+            if (!this.userInteracted) {
+                this.userInteracted = true;
+                const notice = document.getElementById('soundNotice');
+                if (notice) notice.style.display = 'none';
+                if (this.musicEnabled && this.musicAudio) {
+                    this.musicAudio.play().catch(e => console.log("Music autoplay blocked"));
+                }
+            }
+        };
+        document.body.addEventListener('click', handleInteraction);
+        document.body.addEventListener('touchstart', handleInteraction);
+        setTimeout(showNotice, 1000);
     }
     initMusic() {
         try {
-            // رابط موسيقى هادئة (اختر رابطًا مناسبًا)
             this.musicAudio = new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3');
             this.musicAudio.loop = true;
             this.musicAudio.volume = 0.3;
@@ -58,7 +81,7 @@ class SoundManager {
     toggleMusic() {
         this.musicEnabled = !this.musicEnabled;
         localStorage.setItem('musicEnabled', this.musicEnabled);
-        if (this.musicEnabled && this.musicAudio) {
+        if (this.musicEnabled && this.musicAudio && this.userInteracted) {
             this.musicAudio.play().catch(e => console.log("Music autoplay blocked"));
         } else if (this.musicAudio) {
             this.musicAudio.pause();
@@ -70,90 +93,102 @@ class SoundManager {
         const soundIcon = document.getElementById('soundIcon');
         if (soundIcon) {
             soundIcon.className = this.soundEnabled ? 'fas fa-volume-up active-sound' : 'fas fa-volume-mute';
-            if (this.soundEnabled) soundIcon.style.color = '#2ecc71';
-            else soundIcon.style.color = 'var(--text-muted)';
+            soundIcon.style.color = this.soundEnabled ? '#2ecc71' : 'var(--text-muted)';
         }
         const musicIcon = document.getElementById('musicIcon');
         if (musicIcon) {
             musicIcon.className = this.musicEnabled ? 'fas fa-music active-music' : 'fas fa-music-slash';
-            if (this.musicEnabled) musicIcon.style.color = '#2ecc71';
-            else musicIcon.style.color = 'var(--text-muted)';
+            musicIcon.style.color = this.musicEnabled ? '#2ecc71' : 'var(--text-muted)';
         }
     }
 }
 
-// ==================== خدمة التخزين (IndexedDB + LocalStorage للسلة) ====================
-const DB_NAME = "RogvenImageCache";
-const IMAGE_STORE = "images";
-const API_CACHE_STORE = "apiCache";
-
+// ==================== خدمة التخزين باستخدام Dexie.js ====================
 class StorageService {
     constructor() {
         this.db = null;
+        this.useLocalStorageFallback = false;
         this.init();
     }
-    init() {
-        return new Promise((resolve) => {
-            const request = indexedDB.open(DB_NAME, 2);
-            request.onupgradeneeded = (e) => {
-                const dbRef = e.target.result;
-                if (!dbRef.objectStoreNames.contains(IMAGE_STORE))
-                    dbRef.createObjectStore(IMAGE_STORE);
-                if (!dbRef.objectStoreNames.contains(API_CACHE_STORE))
-                    dbRef.createObjectStore(API_CACHE_STORE);
-            };
-            request.onsuccess = (e) => {
-                this.db = e.target.result;
-                resolve();
-            };
-            request.onerror = () => resolve();
-        });
+    async init() {
+        try {
+            this.db = new Dexie("RogvenImageCache");
+            this.db.version(2).stores({
+                images: "url",
+                apiCache: "key"
+            });
+            await this.db.open();
+        } catch (err) {
+            console.warn("IndexedDB failed, falling back to localStorage", err);
+            this.useLocalStorageFallback = true;
+        }
     }
     async getImage(url) {
-        if (!this.db) return null;
-        return new Promise((resolve) => {
-            const tx = this.db.transaction([IMAGE_STORE], "readonly");
-            const get = tx.objectStore(IMAGE_STORE).get(url);
-            get.onsuccess = () => resolve(get.result || null);
-            get.onerror = () => resolve(null);
-        });
+        if (this.useLocalStorageFallback) {
+            const data = localStorage.getItem(`img_${url}`);
+            return data || null;
+        }
+        try {
+            const record = await this.db.images.get(url);
+            return record ? record.base64 : null;
+        } catch(e) { return null; }
     }
     async saveImage(url, base64) {
-        if (!this.db) return;
-        const tx = this.db.transaction([IMAGE_STORE], "readwrite");
-        tx.objectStore(IMAGE_STORE).put(base64, url);
+        if (this.useLocalStorageFallback) {
+            try {
+                localStorage.setItem(`img_${url}`, base64);
+            } catch(e) { console.warn("localStorage full", e); }
+            return;
+        }
+        try {
+            await this.db.images.put({ url, base64 });
+        } catch(e) { console.warn("IndexedDB save failed", e); }
     }
     async getApiCache() {
-        if (!this.db) return null;
-        return new Promise((resolve) => {
-            const tx = this.db.transaction([API_CACHE_STORE], "readonly");
-            const get = tx.objectStore(API_CACHE_STORE).get("mainData");
-            get.onsuccess = () => {
-                const cached = get.result;
-                if (cached && (Date.now() - cached.timestamp) < 3600000)
-                    resolve(cached.data);
-                else resolve(null);
-            };
-            get.onerror = () => resolve(null);
-        });
+        if (this.useLocalStorageFallback) {
+            const cached = localStorage.getItem('apiCache');
+            if (cached) {
+                const data = JSON.parse(cached);
+                if (Date.now() - data.timestamp < 3600000) return data.data;
+            }
+            return null;
+        }
+        try {
+            const record = await this.db.apiCache.get('mainData');
+            if (record && (Date.now() - record.timestamp < 3600000)) return record.data;
+            return null;
+        } catch(e) { return null; }
     }
     async saveApiCache(data) {
-        if (!this.db) return;
-        const tx = this.db.transaction([API_CACHE_STORE], "readwrite");
-        tx.objectStore(API_CACHE_STORE).put({ timestamp: Date.now(), data }, "mainData");
+        if (this.useLocalStorageFallback) {
+            localStorage.setItem('apiCache', JSON.stringify({ timestamp: Date.now(), data }));
+            return;
+        }
+        try {
+            await this.db.apiCache.put({ key: 'mainData', timestamp: Date.now(), data });
+        } catch(e) { console.warn("Failed to save API cache", e); }
     }
-    saveCartState(cartItems) {
-        localStorage.setItem('savedCart', JSON.stringify(cartItems));
+    async clearAllCache() {
+        if (this.useLocalStorageFallback) {
+            const keys = Object.keys(localStorage);
+            keys.forEach(key => { if(key.startsWith('img_') || key === 'apiCache') localStorage.removeItem(key); });
+        } else {
+            try {
+                await this.db.images.clear();
+                await this.db.apiCache.clear();
+            } catch(e) { console.warn("Clear cache failed", e); }
+        }
     }
+    saveCartState(cartItems) { localStorage.setItem('savedCart', JSON.stringify(cartItems)); }
     loadCartState() {
         const saved = localStorage.getItem('savedCart');
         return saved ? JSON.parse(saved) : [];
     }
 }
 
-// ==================== تحميل الصور ====================
+// ==================== تحميل الصور مع شريط تقدم ====================
 class LazyImage {
-    static async render(imgElement, url, storage) {
+    static async render(imgElement, url, storage, onProgress) {
         if (!url) return;
         const cached = await storage.getImage(url);
         if (cached) { imgElement.src = cached; return; }
@@ -165,15 +200,16 @@ class LazyImage {
                 const base64 = reader.result;
                 await storage.saveImage(url, base64);
                 imgElement.src = base64;
+                if (onProgress) onProgress();
             };
             reader.readAsDataURL(blob);
-        } catch (err) { imgElement.src = url; }
+        } catch (err) { imgElement.src = url; if(onProgress) onProgress(); }
     }
 }
 
 // ==================== بطاقة المنتج (مع دعم الحفظ) ====================
 class ProductCard {
-    constructor(product, storage, onUpdateTotal, soundManager, initialQty = 0) {
+    constructor(product, storage, onUpdateTotal, soundManager, initialQty = 0, onImageLoad) {
         this.product = product;
         this.storage = storage;
         this.onUpdateTotal = onUpdateTotal;
@@ -183,6 +219,7 @@ class ProductCard {
         this.qtyInput = null;
         this.subtotalSpan = null;
         this.subtotalRow = null;
+        this.onImageLoad = onImageLoad;
     }
     render() {
         const uniqueId = `img_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
@@ -213,7 +250,7 @@ class ProductCard {
         incBtn.addEventListener('click', () => { this.sound.playClick(); this.updateQuantity(1); });
         decBtn.addEventListener('click', () => { this.sound.playClick(); this.updateQuantity(-1); });
         const imgEl = cardDiv.querySelector(`#${uniqueId}`);
-        LazyImage.render(imgEl, this.product.imageUrl, this.storage);
+        LazyImage.render(imgEl, this.product.imageUrl, this.storage, this.onImageLoad);
         this.updateUI();
         return cardDiv;
     }
@@ -255,7 +292,7 @@ class ProductCard {
     }
 }
 
-// ==================== شبكة المنتجات ====================
+// ==================== شبكة المنتجات (مع شريط تقدم الصور) ====================
 class ProductsGrid {
     constructor(containerId, storage, onTotalUpdate, soundManager, savedCart) {
         this.container = document.getElementById(containerId);
@@ -265,6 +302,19 @@ class ProductsGrid {
         this.cards = [];
         this.currentView = 'hero';
         this.savedCart = savedCart;
+        this.imagesLoaded = 0;
+        this.totalImages = 0;
+        this.onImageProgress = null;
+    }
+    setImageProgressCallback(callback) {
+        this.onImageProgress = callback;
+    }
+    imageLoaded() {
+        this.imagesLoaded++;
+        if (this.onImageProgress) {
+            const percent = (this.imagesLoaded / this.totalImages) * 100;
+            this.onImageProgress(percent);
+        }
     }
     renderCategory(category, products) {
         const sectionId = `section-${category}`;
@@ -273,15 +323,18 @@ class ProductsGrid {
         const sectionEl = document.getElementById(sectionId);
         products.forEach(product => {
             const savedQty = this.savedCart[product.name] || 0;
-            const card = new ProductCard(product, this.storage, (name, first) => this.onTotalUpdate(name, first), this.sound, savedQty);
+            const card = new ProductCard(product, this.storage, (name, first) => this.onTotalUpdate(name, first), this.sound, savedQty, () => this.imageLoaded());
             const cardElement = card.render();
             sectionEl.appendChild(cardElement);
             this.cards.push({ category, card, sectionElement: sectionEl });
+            this.totalImages++;
         });
     }
     clear() {
         if (this.container) this.container.innerHTML = '';
         this.cards = [];
+        this.imagesLoaded = 0;
+        this.totalImages = 0;
     }
     setView(view) {
         this.currentView = view;
@@ -291,11 +344,19 @@ class ProductsGrid {
     }
     filterBySearch(query) {
         const lowerQuery = query.toLowerCase();
+        let visibleCount = 0;
         this.cards.forEach(({ card }) => {
             const name = card.getName().toLowerCase();
             const matches = name.includes(lowerQuery);
             card.element.style.display = matches ? (this.currentView === 'hero' ? 'block' : 'flex') : 'none';
+            if (matches) visibleCount++;
         });
+        const resultSpan = document.getElementById('searchResultCount');
+        if (resultSpan) {
+            if (query.trim() !== '') resultSpan.innerText = `${visibleCount} نتيجة`;
+            else resultSpan.innerText = '';
+        }
+        return visibleCount;
     }
     getAllCartItems() {
         return this.cards
@@ -349,11 +410,12 @@ class CartFooter {
     }
 }
 
-// ==================== رأس التطبيق (بدون زر العرض) ====================
+// ==================== رأس التطبيق (مع دعم زر مسح البحث) ====================
 class AppHeader {
-    constructor(themeBtnId, searchInputId, soundBtnId, musicBtnId, profileBtnId, settingsBtnId, cartBtnId, onThemeToggle, onSearch, onSoundToggle, onMusicToggle, onProfileOpen, onSettingsOpen, onCartClick) {
+    constructor(themeBtnId, searchInputId, soundBtnId, musicBtnId, profileBtnId, settingsBtnId, cartBtnId, clearSearchBtnId, onThemeToggle, onSearch, onSoundToggle, onMusicToggle, onProfileOpen, onSettingsOpen, onCartClick) {
         this.themeBtn = document.getElementById(themeBtnId);
         this.searchInput = document.getElementById(searchInputId);
+        this.clearSearchBtn = document.getElementById(clearSearchBtnId);
         this.soundBtn = document.getElementById(soundBtnId);
         this.musicBtn = document.getElementById(musicBtnId);
         this.profileBtn = document.getElementById(profileBtnId);
@@ -371,6 +433,8 @@ class AppHeader {
     init() {
         if (this.themeBtn) this.themeBtn.addEventListener('click', () => this.onThemeToggle());
         if (this.searchInput) this.searchInput.addEventListener('input', (e) => this.onSearch(e.target.value));
+        if (this.clearSearchBtn) this.clearSearchBtn.addEventListener('click', () => { this.searchInput.value = ''; this.onSearch(''); this.clearSearchBtn.style.display = 'none'; });
+        if (this.searchInput) this.searchInput.addEventListener('input', () => { if(this.clearSearchBtn) this.clearSearchBtn.style.display = this.searchInput.value ? 'flex' : 'none'; });
         if (this.soundBtn) this.soundBtn.addEventListener('click', () => this.onSoundToggle());
         if (this.musicBtn) this.musicBtn.addEventListener('click', () => this.onMusicToggle());
         if (this.profileBtn) this.profileBtn.addEventListener('click', () => this.onProfileOpen());
@@ -589,7 +653,7 @@ class App {
         this.productsGrid = new ProductsGrid('main-container', this.storage, (name, first) => this.updateTotal(name, first), this.soundManager, this.savedCart);
         this.cartFooter = new CartFooter('footer-cart', 'grand-total', () => this.sendWhatsApp());
         this.header = new AppHeader(
-            'themeToggleBtn', 'search-input', 'soundToggleBtn', 'musicToggleBtn', 'profileBtn', 'settingsBtn', 'cartIconBtn',
+            'themeToggleBtn', 'search-input', 'soundToggleBtn', 'musicToggleBtn', 'profileBtn', 'settingsBtn', 'cartIconBtn', 'clearSearchBtn',
             () => this.toggleTheme(),
             (query) => this.productsGrid.filterBySearch(query),
             () => this.toggleSound(),
@@ -600,9 +664,41 @@ class App {
         );
         this.categoryChips = new CategoryChips('category-chips', (cat) => this.onCategorySelected(cat));
         this.setupModals();
+        // شريط تقدم الصور
+        const progressBar = document.getElementById('imageProgressBar');
+        const progressFill = document.querySelector('.image-progress-fill');
+        if (progressBar && progressFill) {
+            this.productsGrid.setImageProgressCallback((percent) => {
+                if (percent < 100) {
+                    progressBar.style.display = 'block';
+                    progressFill.style.width = `${percent}%`;
+                } else {
+                    setTimeout(() => { progressBar.style.display = 'none'; }, 500);
+                }
+            });
+        }
+        // إظهار skeleton أولاً
+        const skeleton = document.getElementById('skeletonContainer');
+        const productsContent = document.getElementById('productsContent');
+        if (skeleton) skeleton.style.display = 'grid';
+        if (productsContent) productsContent.style.display = 'none';
         const cachedData = await this.storage.getApiCache();
         if (cachedData) this.renderFullData(cachedData);
         this.fetchFreshData();
+        this.setupOfflineDetection();
+    }
+    setupOfflineDetection() {
+        window.addEventListener('online', () => {
+            const offlinePage = document.getElementById('offlinePage');
+            if (offlinePage) offlinePage.style.display = 'none';
+            this.fetchFreshData();
+        });
+        window.addEventListener('offline', () => {
+            const offlinePage = document.getElementById('offlinePage');
+            if (offlinePage && !this.fullData) offlinePage.style.display = 'flex';
+        });
+        const retryBtn = document.getElementById('retryConnectionBtn');
+        if (retryBtn) retryBtn.addEventListener('click', () => { if(navigator.onLine) this.fetchFreshData(); else alert('لا يوجد اتصال إنترنت'); });
     }
     loadSavedCart() {
         const saved = localStorage.getItem('savedCart');
@@ -625,10 +721,10 @@ class App {
             if (event.target === profileModal) profileModal.style.display = 'none';
             if (event.target === settingsModal) settingsModal.style.display = 'none';
         };
-        // إعدادات الأزرار داخل مودال الإعدادات
         const settingsSoundBtn = document.getElementById('settingsSoundBtn');
         const settingsMusicBtn = document.getElementById('settingsMusicBtn');
         const settingsViewBtn = document.getElementById('settingsViewBtn');
+        const clearCacheBtn = document.getElementById('clearCacheBtn');
         if (settingsSoundBtn) {
             settingsSoundBtn.innerText = this.soundManager.soundEnabled ? 'إيقاف' : 'تفعيل';
             settingsSoundBtn.onclick = () => {
@@ -650,6 +746,15 @@ class App {
                 settingsViewBtn.innerText = this.productsGrid?.currentView === 'hero' ? 'وضع القائمة' : 'وضع البطاقات';
             };
         }
+        if (clearCacheBtn) {
+            clearCacheBtn.onclick = async () => {
+                if (confirm('هل أنت متأكد من مسح جميع الصور المخزنة مؤقتاً؟ سيتم إعادة تحميلها عند الحاجة.')) {
+                    await this.storage.clearAllCache();
+                    alert('تم مسح ذاكرة التخزين المؤقت بنجاح');
+                    location.reload();
+                }
+            };
+        }
     }
     openProfileModal() {
         this.game.updateProfileModal();
@@ -659,7 +764,6 @@ class App {
     openSettingsModal() {
         const modal = document.getElementById('settingsModal');
         if (modal) modal.style.display = 'block';
-        // تحديث نصوص الأزرار
         const settingsSoundBtn = document.getElementById('settingsSoundBtn');
         const settingsMusicBtn = document.getElementById('settingsMusicBtn');
         const settingsViewBtn = document.getElementById('settingsViewBtn');
@@ -678,22 +782,46 @@ class App {
             await this.storage.saveApiCache(data);
         } catch (err) {
             console.error(err);
-            const loader = document.getElementById('loader');
-            if (loader && !this.fullData) loader.innerHTML = `❌ فشل التحميل: ${err.message}<br><small>تأكد من اتصال الإنترنت وأن API يعمل</small>`;
-            else if (!this.fullData) {
-                const container = document.getElementById('main-container');
-                if (container) container.innerHTML = `<div class="loader">❌ فشل التحميل: ${err.message}</div>`;
+            const skeleton = document.getElementById('skeletonContainer');
+            if (skeleton) skeleton.style.display = 'none';
+            const productsContent = document.getElementById('productsContent');
+            if (productsContent && !this.fullData) {
+                productsContent.style.display = 'block';
+                productsContent.innerHTML = `<div class="loader">❌ فشل التحميل: ${err.message}<br><small>تأكد من اتصال الإنترنت وأن API يعمل</small></div>`;
             }
         }
     }
     renderFullData(data) {
         this.fullData = data;
         this.productsGrid.clear();
-        const loader = document.getElementById('loader');
-        if (loader) loader.style.display = 'none';
+        // إخفاء skeleton وإظهار المحتوى
+        const skeleton = document.getElementById('skeletonContainer');
+        const productsContent = document.getElementById('productsContent');
+        if (skeleton) skeleton.style.display = 'none';
+        if (productsContent) productsContent.style.display = 'block';
+        // نقل حاوية المنتجات الفعلية إلى داخل productsContent
+        const mainContainer = document.getElementById('main-container');
+        if (mainContainer && productsContent && !productsContent.contains(mainContainer)) {
+            // بالفعل main-container هو نفسه الحاوية، لكننا أضفنا productsContent كغلاف، نحتاج لتجنب الازدواجية
+            // الحل: نجعل main-container هو نفسه productsContent أو نستخدم productsContent كحاوية فعلية
+            // لكن ProductsGrid يستخدم main-container. الأسهل: تعديل ProductsGrid لاستخدام productsContent
+            // بدلاً من ذلك، سنقوم بنقل المحتوى من main-container إلى productsContent
+            if (mainContainer.id === 'main-container') {
+                const temp = document.createElement('div');
+                while(mainContainer.firstChild) temp.appendChild(mainContainer.firstChild);
+                productsContent.appendChild(temp);
+                mainContainer.style.display = 'none';
+            }
+        }
         for (const category in data) {
+            // التحقق من صحة كل منتج (صورة افتراضية، stock افتراضي)
+            const validProducts = data[category].map(p => ({
+                ...p,
+                imageUrl: p.imageUrl && p.imageUrl.startsWith('http') ? p.imageUrl : 'https://via.placeholder.com/300?text=No+Image',
+                stock: p.stock !== undefined ? p.stock : 999
+            }));
             this.categoryChips.addCategory(category);
-            this.productsGrid.renderCategory(category, data[category]);
+            this.productsGrid.renderCategory(category, validProducts);
         }
         this.updateTotal();
     }
@@ -763,7 +891,6 @@ class App {
     toggleView() {
         const newView = this.productsGrid.currentView === 'hero' ? 'list' : 'hero';
         this.productsGrid.setView(newView);
-        // نحدّث النص في زر الإعدادات أيضاً
         const settingsViewBtn = document.getElementById('settingsViewBtn');
         if (settingsViewBtn) settingsViewBtn.innerText = newView === 'hero' ? 'وضع القائمة' : 'وضع البطاقات';
         const searchVal = document.getElementById('search-input');
