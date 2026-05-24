@@ -195,3 +195,27 @@ body {
   100% { transform: scale(1); }
 }
 .product-card.added { animation: pop 0.3s ease; }
+/* ========== أيقونة السلة والعداد ========== */
+.cart-icon-wrapper {
+    position: relative;
+    display: inline-block;
+}
+.cart-count {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: var(--primary);
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 11px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 4px rgba(0,0,0,0.3);
+    font-family: monospace;
+}
+/* نضمن ظهور العداد فقط عند وجود عناصر */
+.cart-count:empty { display: none; }
