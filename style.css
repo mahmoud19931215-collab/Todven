@@ -10,6 +10,8 @@
   --shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
   --glass-blur: blur(12px);
   --skeleton-bg: rgba(0, 0, 0, 0.1);
+  --modal-bg: rgba(0,0,0,0.7);
+  --card-bg-solid: rgba(255,255,255,0.95);
 }
 
 [data-theme="dark"] {
@@ -19,6 +21,7 @@
   --text-muted: #bdc3c7;
   --border-color: rgba(255, 255, 255, 0.2);
   --skeleton-bg: rgba(255, 255, 255, 0.05);
+  --card-bg-solid: #2c2c3a;
 }
 
 * {
@@ -53,7 +56,8 @@ body {
   background: linear-gradient(135deg, #0a0f2a 0%, #0a1a2a 100%);
 }
 
-/* ========== الشمس ========== */
+/* ========== الشمس والغيوم والقمر ========== */
+/* ... (كما هي، لم تتغير) ... */
 .sun {
   position: absolute;
   top: 8%;
@@ -77,8 +81,6 @@ body {
 [data-theme="dark"] .sun {
   display: none;
 }
-
-/* ========== الغيوم ========== */
 .cloud {
   position: absolute;
   background: rgba(255, 255, 255, 0.9);
@@ -101,7 +103,6 @@ body {
 }
 .cloud1:before { width: 80px; height: 80px; top: -30px; left: 20px; }
 .cloud1:after { width: 100px; height: 100px; top: -40px; left: 70px; }
-
 .cloud2 {
   width: 220px;
   height: 90px;
@@ -118,7 +119,6 @@ body {
 }
 .cloud2:before { width: 100px; height: 100px; top: -40px; left: 30px; }
 .cloud2:after { width: 120px; height: 120px; top: -50px; left: 90px; }
-
 .cloud3 {
   width: 150px;
   height: 70px;
@@ -135,7 +135,6 @@ body {
 }
 .cloud3:before { width: 70px; height: 70px; top: -25px; left: 15px; }
 .cloud3:after { width: 80px; height: 80px; top: -35px; left: 60px; }
-
 .cloud4 {
   width: 200px;
   height: 80px;
@@ -152,13 +151,10 @@ body {
 }
 .cloud4:before { width: 90px; height: 90px; top: -35px; left: 20px; }
 .cloud4:after { width: 110px; height: 110px; top: -45px; left: 80px; }
-
 @keyframes moveCloud {
   from { transform: translateX(0); }
   to { transform: translateX(calc(100vw + 300px)); }
 }
-
-/* ========== القمر والنجوم ========== */
 .night-elements {
   position: relative;
   width: 100%;
@@ -274,30 +270,28 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  position: relative;
 }
 .icon-btn:active {
   transform: scale(0.92);
 }
-.cart-icon-wrapper {
-  position: relative;
-}
 .cart-count {
   position: absolute;
-  top: -8px;
-  right: -8px;
+  top: -6px;
+  right: -6px;
   background: var(--primary);
   color: white;
   border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  font-size: 11px;
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
   font-weight: bold;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* ========== أزرار التصنيفات (غير مثبتة - تخرج مع السكرول) ========== */
+/* ========== أزرار التصنيفات ========== */
 .chips-wrapper {
   display: flex;
   overflow-x: auto;
@@ -309,7 +303,6 @@ body {
   margin: 0 15px 10px 15px;
   width: calc(100% - 30px);
   scrollbar-width: none;
-  /* removed position: sticky and top */
 }
 .chips-wrapper::-webkit-scrollbar { display: none; }
 .chip {
@@ -383,7 +376,7 @@ body {
   100% { opacity: 0.6; }
 }
 
-/* ========== بطاقات المنتجات (وضع البطاقات فقط) ========== */
+/* ========== بطاقات المنتجات ========== */
 .product-card {
   background: var(--bg-card);
   backdrop-filter: var(--glass-blur);
@@ -455,7 +448,9 @@ body {
   font-size: 20px;
   font-weight: bold;
   background: transparent;
-  border: none;
+  border: 1px solid var(--border-color);
+  border-radius: 30px;
+  padding: 6px;
   color: var(--text-main);
 }
 .item-subtotal {
@@ -504,6 +499,156 @@ body {
 }
 .whatsapp-send:active { transform: scale(0.96); }
 
+/* ========== نافذة منبثقة (مودال) ========== */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--modal-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  backdrop-filter: blur(5px);
+}
+.modal-content {
+  background: var(--card-bg-solid);
+  border-radius: 28px;
+  width: 90%;
+  max-width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  direction: rtl;
+  box-shadow: 0 20px 35px rgba(0,0,0,0.3);
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border-color);
+  font-weight: bold;
+  font-size: 18px;
+}
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.modal-body {
+  padding: 20px;
+}
+.clear-cache-btn {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 40px;
+  width: 100%;
+  font-size: 16px;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+.cache-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.cart-modal-content {
+  max-width: 500px;
+}
+.cart-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+.cart-item-info {
+  flex: 1;
+}
+.cart-item-name {
+  font-weight: bold;
+}
+.cart-item-price {
+  font-size: 12px;
+  color: var(--primary);
+}
+.cart-item-qty {
+  font-size: 14px;
+}
+.cart-item-remove {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+.empty-cart-msg {
+  text-align: center;
+  padding: 30px;
+  color: var(--text-muted);
+}
+.cart-modal-footer {
+  padding: 15px 20px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.cart-total-display {
+  font-weight: bold;
+  font-size: 16px;
+}
+
+/* ========== بانر النسخة المخبأة ========== */
+.offline-banner {
+  background: rgba(241, 196, 15, 0.9);
+  color: #2c3e50;
+  padding: 8px 15px;
+  margin: 0 15px 10px 15px;
+  border-radius: 40px;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  backdrop-filter: blur(4px);
+}
+.offline-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.retry-fetch-btn {
+  background: var(--primary);
+  border: none;
+  padding: 4px 12px;
+  border-radius: 30px;
+  color: white;
+  cursor: pointer;
+}
+.close-banner-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #2c3e50;
+  margin-right: auto;
+}
+.last-update {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
 /* ========== صفحة عدم الاتصال ========== */
 .offline-page {
   position: fixed;
@@ -544,6 +689,14 @@ body {
   100% { transform: scale(1); }
 }
 
+/* ========== تمييز نتائج البحث ========== */
+.highlight {
+  background-color: #f1c40f;
+  color: #2c3e50;
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
 /* ========== تحسينات عامة ========== */
 .container {
   padding: 15px;
@@ -565,7 +718,7 @@ body {
   font-size: 18px;
 }
 
-/* ========== دعم الوضع الأفقي (تحسين للشاشات الكبيرة) ========== */
+/* ========== دعم الوضع الأفقي ========== */
 @media (orientation: landscape) and (min-width: 768px) {
   .product-container.hero-view {
     display: grid;
@@ -593,4 +746,18 @@ body {
   .btn-qty { width: 36px; height: 36px; font-size: 18px; }
   .qty-input { width: 45px; font-size: 18px; }
   .footer-cart { padding: 10px 18px; }
+}
+
+/* ========== بديل لـ backdrop-filter للمتصفحات القديمة ========== */
+@supports not (backdrop-filter: blur(4px)) {
+  .header, .chips-wrapper, .product-card, .footer-cart, .offline-banner {
+    background: rgba(255, 255, 255, 0.9);
+  }
+  [data-theme="dark"] .header,
+  [data-theme="dark"] .chips-wrapper,
+  [data-theme="dark"] .product-card,
+  [data-theme="dark"] .footer-cart,
+  [data-theme="dark"] .offline-banner {
+    background: #2c2c3a;
+  }
 }
