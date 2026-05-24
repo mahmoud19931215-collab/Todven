@@ -1,9 +1,9 @@
 // ==================== ثوابت عامة ====================
 const TARGET_NUMBER = "963945083365";
 const API_URL = "https://script.google.com/macros/s/AKfycbz8CnO-_aiuboqy7R4kXFA-FQ4uNaLAVc5-_aC-z6txmg2W33wG7c4Igj_NJeKGF-fk/exec";
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 12; // تم التخفيض من 20 إلى 12 للذاكرة المنخفضة
 
-// ==================== خدمة التخزين (Dexie) ====================
+// ==================== خدمة التخزين (Dexie) مع دعم Blob ====================
 class StorageService {
     constructor() {
         this.db = null;
@@ -13,7 +13,7 @@ class StorageService {
     async init() {
         try {
             this.db = new Dexie("RogvenImageCache");
-            this.db.version(2).stores({
+            this.db.version(3).stores({
                 images: "url",
                 apiCache: "key"
             });
@@ -23,25 +23,36 @@ class StorageService {
             this.useLocalStorageFallback = true;
         }
     }
-    async getImage(url) {
+    async getImageBlob(url) {
         if (this.useLocalStorageFallback) {
             const data = localStorage.getItem(`img_${url}`);
-            return data || null;
+            if (data) {
+                // تحويل base64 إلى blob
+                const binary = atob(data.split(',')[1]);
+                const array = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+                return new Blob([array], { type: 'image/jpeg' });
+            }
+            return null;
         }
         try {
             const record = await this.db.images.get(url);
-            return record ? record.base64 : null;
+            return record ? record.blob : null;
         } catch(e) { return null; }
     }
-    async saveImage(url, base64) {
+    async saveImageBlob(url, blob) {
         if (this.useLocalStorageFallback) {
-            try {
-                localStorage.setItem(`img_${url}`, base64);
-            } catch(e) { console.warn("localStorage full", e); }
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+                try {
+                    localStorage.setItem(`img_${url}`, reader.result);
+                } catch(e) { console.warn("localStorage full", e); }
+            };
             return;
         }
         try {
-            await this.db.images.put({ url, base64 });
+            await this.db.images.put({ url, blob });
         } catch(e) { console.warn("IndexedDB save failed", e); }
     }
     async getApiCache() {
@@ -86,28 +97,32 @@ class StorageService {
     }
 }
 
-// ==================== تحميل الصور ====================
+// ==================== تحميل الصور (باستخدام Blob) ====================
 class LazyImage {
     static async render(imgElement, url, storage, onProgress) {
         if (!url) return;
-        const cached = await storage.getImage(url);
-        if (cached) { imgElement.src = cached; return; }
+        const blob = await storage.getImageBlob(url);
+        if (blob) {
+            const objectUrl = URL.createObjectURL(blob);
+            imgElement.src = objectUrl;
+            if (onProgress) onProgress(); // إصلاح: استدعاء التقدم للصور المخزنة
+            return;
+        }
         try {
             const response = await fetch(url);
-            const blob = await response.blob();
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                const base64 = reader.result;
-                await storage.saveImage(url, base64);
-                imgElement.src = base64;
-                if (onProgress) onProgress();
-            };
-            reader.readAsDataURL(blob);
-        } catch (err) { imgElement.src = url; if(onProgress) onProgress(); }
+            const blobData = await response.blob();
+            await storage.saveImageBlob(url, blobData);
+            const objectUrl = URL.createObjectURL(blobData);
+            imgElement.src = objectUrl;
+            if (onProgress) onProgress();
+        } catch (err) {
+            imgElement.src = url;
+            if(onProgress) onProgress();
+        }
     }
 }
 
-// ==================== بطاقة المنتج ====================
+// ==================== بطاقة المنتج (مع تفويض الأحداث وحقل كمية قابل للتعديل) ====================
 class ProductCard {
     constructor(product, storage, onUpdateTotal, initialQty = 0, onImageLoad) {
         this.product = product;
@@ -119,9 +134,10 @@ class ProductCard {
         this.subtotalSpan = null;
         this.subtotalRow = null;
         this.onImageLoad = onImageLoad;
+        this.debounceTimer = null;
     }
     render() {
-        const uniqueId = `img_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+        const uniqueId = `img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
         const cardDiv = document.createElement('div');
         cardDiv.className = 'product-card';
         cardDiv.setAttribute('data-name', this.product.name);
@@ -135,7 +151,7 @@ class ProductCard {
                 <div class="item-subtotal" style="display: none;">المجموع: <span class="subtotal-val">0</span> ل.س</div>
                 <div class="quantity-controls">
                     <button class="btn-qty inc-qty" style="background: var(--primary)">+</button>
-                    <input type="number" class="qty-input" value="${this.quantity}" readonly>
+                    <input type="number" class="qty-input" value="${this.quantity}" step="1" min="0">
                     <button class="btn-qty dec-qty">-</button>
                 </div>
             </div>
@@ -144,10 +160,26 @@ class ProductCard {
         this.qtyInput = cardDiv.querySelector('.qty-input');
         this.subtotalSpan = cardDiv.querySelector('.subtotal-val');
         this.subtotalRow = cardDiv.querySelector('.item-subtotal');
+        
+        // إضافة مستمعي الأحداث (سيتم استبدالهم بتفويض الأحداث لاحقاً، لكننا سنبقيهم للتوافق)
         const incBtn = cardDiv.querySelector('.inc-qty');
         const decBtn = cardDiv.querySelector('.dec-qty');
-        incBtn.addEventListener('click', () => { this.updateQuantity(1); });
-        decBtn.addEventListener('click', () => { this.updateQuantity(-1); });
+        incBtn.addEventListener('click', (e) => { e.stopPropagation(); this.updateQuantity(1); });
+        decBtn.addEventListener('click', (e) => { e.stopPropagation(); this.updateQuantity(-1); });
+        this.qtyInput.addEventListener('change', (e) => {
+            let newVal = parseInt(e.target.value);
+            if (isNaN(newVal)) newVal = 0;
+            const stock = parseInt(this.element.getAttribute('data-stock')) || 999;
+            newVal = Math.min(stock, Math.max(0, newVal));
+            const delta = newVal - this.quantity;
+            if (delta !== 0) {
+                this.quantity = newVal;
+                this.updateUI();
+                this.onUpdateTotal(delta > 0 ? this.product.name : null, false);
+            }
+            this.qtyInput.value = this.quantity;
+        });
+        
         const imgEl = cardDiv.querySelector(`#${uniqueId}`);
         LazyImage.render(imgEl, this.product.imageUrl, this.storage, this.onImageLoad);
         this.updateUI();
@@ -164,22 +196,26 @@ class ProductCard {
         }
     }
     updateQuantity(delta) {
-        const newVal = this.quantity + delta;
-        const stock = parseInt(this.element.getAttribute('data-stock')) || 999;
-        if (newVal >= 0 && newVal <= stock) {
-            const wasZero = this.quantity === 0;
-            this.quantity = newVal;
-            this.updateUI();
-            this.element.classList.add('added');
-            setTimeout(() => this.element.classList.remove('added'), 300);
-            if (this.onUpdateTotal) {
+        // Debouncing للضغط المزدوج
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => {
+            const newVal = this.quantity + delta;
+            const stock = parseInt(this.element.getAttribute('data-stock')) || 999;
+            if (newVal >= 0 && newVal <= stock) {
+                const wasZero = this.quantity === 0;
+                this.quantity = newVal;
+                this.updateUI();
+                this.element.classList.add('added');
+                setTimeout(() => this.element.classList.remove('added'), 300);
                 this.onUpdateTotal(delta > 0 ? this.product.name : null, wasZero && delta > 0);
             }
-        }
+            this.debounceTimer = null;
+        }, 150);
     }
     getQuantity() { return this.quantity; }
     getPrice() { return this.product.price; }
     getName() { return this.product.name; }
+    getStock() { return parseInt(this.element.getAttribute('data-stock')) || 999; }
     escapeHtml(str) {
         if (!str) return '';
         return str.replace(/[&<>]/g, (m) => {
@@ -191,7 +227,7 @@ class ProductCard {
     }
 }
 
-// ==================== شبكة المنتجات (مع تحميل تجزيئي) ====================
+// ==================== شبكة المنتجات (مع تحميل تجزيئي وتفويض أحداث) ====================
 class ProductsGrid {
     constructor(containerId, storage, onTotalUpdate, savedCart) {
         this.originalContainer = document.getElementById(containerId);
@@ -210,6 +246,31 @@ class ProductsGrid {
         this.fullProductsMap = new Map();
         this.currentPageMap = new Map();
         this.loadMoreButtons = new Map();
+        this.activeCategory = 'all';
+        this.searchQuery = '';
+        // تفويض الأحداث للحاوية الرئيسية
+        this.setupEventDelegation();
+    }
+    setupEventDelegation() {
+        // سنستمع للأحداث على حاوية المنتجات
+        this.container.addEventListener('click', (e) => {
+            const target = e.target;
+            if (target.classList && target.classList.contains('inc-qty')) {
+                const cardDiv = target.closest('.product-card');
+                if (cardDiv) {
+                    const cardObj = this.cards.find(c => c.card.element === cardDiv);
+                    if (cardObj) cardObj.card.updateQuantity(1);
+                }
+            } else if (target.classList && target.classList.contains('dec-qty')) {
+                const cardDiv = target.closest('.product-card');
+                if (cardDiv) {
+                    const cardObj = this.cards.find(c => c.card.element === cardDiv);
+                    if (cardObj) cardObj.card.updateQuantity(-1);
+                }
+            } else if (target.classList && target.classList.contains('qty-input')) {
+                // تم التعامل معه في ProductCard نفسه، لكن لا مانع
+            }
+        });
     }
     setImageProgressCallback(callback) {
         this.onImageProgress = callback;
@@ -287,16 +348,40 @@ class ProductsGrid {
         this.loadMoreButtons.clear();
     }
     filterBySearch(query) {
-        const lowerQuery = query.toLowerCase();
+        this.searchQuery = query.toLowerCase();
+        const lowerQuery = this.searchQuery;
+        const activeCat = this.activeCategory;
         let visibleCount = 0;
-        this.cards.forEach(({ card }) => {
+        
+        // تصفية حسب الفئة + البحث
+        this.cards.forEach(({ card, category }) => {
             const name = card.getName().toLowerCase();
-            const matches = name.includes(lowerQuery);
-            card.element.style.display = matches ? 'block' : 'none';
-            if (matches) visibleCount++;
+            const matchesSearch = name.includes(lowerQuery);
+            const matchesCategory = (activeCat === 'all' || category === activeCat);
+            const visible = matchesSearch && matchesCategory;
+            card.element.style.display = visible ? 'block' : 'none';
+            if (visible) visibleCount++;
+            
+            // تمييز النص المطابق
+            if (matchesSearch && lowerQuery !== '') {
+                const nameElement = card.element.querySelector('.product-name');
+                if (nameElement) {
+                    const originalText = card.getName();
+                    const regex = new RegExp(`(${this.escapeRegex(lowerQuery)})`, 'gi');
+                    const highlighted = originalText.replace(regex, '<span class="highlight">$1</span>');
+                    nameElement.innerHTML = highlighted;
+                }
+            } else {
+                const nameElement = card.element.querySelector('.product-name');
+                if (nameElement && nameElement.innerHTML !== card.getName()) {
+                    nameElement.innerHTML = card.getName();
+                }
+            }
         });
+        
+        // إخفاء أزرار "المزيد" إذا كان هناك بحث
         this.loadMoreButtons.forEach((btn, category) => {
-            if (lowerQuery !== '') {
+            if (lowerQuery !== '' || (activeCat !== 'all' && activeCat !== category)) {
                 btn.style.display = 'none';
             } else {
                 const products = this.fullProductsMap.get(category);
@@ -307,12 +392,16 @@ class ProductsGrid {
                 }
             }
         });
+        
         const resultSpan = document.getElementById('searchResultCount');
         if (resultSpan) {
             if (query.trim() !== '') resultSpan.innerText = `${visibleCount} نتيجة`;
             else resultSpan.innerText = '';
         }
         return visibleCount;
+    }
+    escapeRegex(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
     getAllCartItems() {
         return this.cards
@@ -341,6 +430,18 @@ class ProductsGrid {
             window.scrollTo({ top: section.offsetTop - 120, behavior: 'smooth' });
         }
     }
+    setActiveCategory(category) {
+        this.activeCategory = category;
+        this.filterBySearch(this.searchQuery);
+    }
+    removeItemFromCart(productName) {
+        const cardObj = this.cards.find(c => c.card.getName() === productName);
+        if (cardObj && cardObj.card.getQuantity() > 0) {
+            cardObj.card.updateQuantity(-cardObj.card.getQuantity());
+            return true;
+        }
+        return false;
+    }
 }
 
 // ==================== فوتر السلة ====================
@@ -363,10 +464,27 @@ class CartFooter {
             if (hasItems) this.footer.classList.add('show');
             else this.footer.classList.remove('show');
         }
+        // تحديث عداد السلة في الأيقونة
+        const cartBadge = document.getElementById('cartCountBadge');
+        if (cartBadge) {
+            const totalQty = this.getTotalQtyFromStorage();
+            cartBadge.innerText = totalQty;
+            cartBadge.style.display = totalQty > 0 ? 'flex' : 'none';
+        }
+    }
+    getTotalQtyFromStorage() {
+        const saved = localStorage.getItem('savedCart');
+        if (saved) {
+            const cart = JSON.parse(saved);
+            let total = 0;
+            for (let qty of Object.values(cart)) total += qty;
+            return total;
+        }
+        return 0;
     }
 }
 
-// ==================== رأس التطبيق (بدون أيقونة سلة) ====================
+// ==================== رأس التطبيق ====================
 class AppHeader {
     constructor(themeBtnId, searchInputId, clearSearchBtnId, onThemeToggle, onSearch) {
         this.themeBtn = document.getElementById(themeBtnId);
@@ -410,6 +528,17 @@ class CategoryChips {
         chipElement.classList.add('active');
         this.onSelectCategory(catName);
     }
+    clearAllExceptAll() {
+        const chips = this.container.querySelectorAll('.chip');
+        chips.forEach(chip => {
+            const cat = chip.getAttribute('data-category');
+            if (cat !== 'all') chip.remove();
+        });
+        this.categories = ['all'];
+        this.activeCategory = 'all';
+        const allChip = this.container.querySelector('.chip[data-category="all"]');
+        if (allChip) allChip.classList.add('active');
+    }
 }
 
 // ==================== التطبيق الرئيسي ====================
@@ -423,6 +552,7 @@ class App {
         this.fullData = null;
         this.lastTotalQty = 0;
         this.savedCart = {};
+        this.lastFetchTime = null;
         this.init();
     }
     async init() {
@@ -456,9 +586,43 @@ class App {
         if (productsContent) productsContent.style.display = 'none';
 
         const cachedData = await this.storage.getApiCache();
-        if (cachedData) this.renderFullData(cachedData);
+        if (cachedData) {
+            this.renderFullData(cachedData);
+            this.showOfflineBanner(true, this.getLastUpdateTimeFromCache());
+        }
         this.fetchFreshData();
         this.setupOfflineDetection();
+        this.setupSettingsModal();
+        this.setupCartModal();
+        this.updateCartBadge();
+    }
+    getLastUpdateTimeFromCache() {
+        if (this.storage.useLocalStorageFallback) {
+            const cached = localStorage.getItem('apiCache');
+            if (cached) {
+                const data = JSON.parse(cached);
+                return data.timestamp;
+            }
+        } else {
+            // يمكن تخزين الوقت مع الكاش، ولكننا سنستخدم وقت التحميل
+        }
+        return null;
+    }
+    showOfflineBanner(isCached, timestamp) {
+        const banner = document.getElementById('offlineBanner');
+        if (!banner) return;
+        if (isCached) {
+            banner.style.display = 'block';
+            const msgSpan = document.querySelector('#offlineBanner .offline-banner-content span:first-of-type');
+            if (msgSpan) msgSpan.innerText = 'أنت تشاهد نسخة مخزنة مؤقتاً';
+            const timeSpan = document.getElementById('lastUpdateTime');
+            if (timeSpan && timestamp) {
+                const date = new Date(timestamp);
+                timeSpan.innerText = `آخر تحديث: ${date.toLocaleTimeString()}`;
+            }
+        } else {
+            banner.style.display = 'none';
+        }
     }
     setupOfflineDetection() {
         window.addEventListener('online', () => {
@@ -472,6 +636,101 @@ class App {
         });
         const retryBtn = document.getElementById('retryConnectionBtn');
         if (retryBtn) retryBtn.addEventListener('click', () => { if(navigator.onLine) this.fetchFreshData(); else alert('لا يوجد اتصال إنترنت'); });
+        const retryFetchBtn = document.getElementById('retryFetchBtn');
+        if (retryFetchBtn) retryFetchBtn.addEventListener('click', () => this.fetchFreshData());
+        const closeBannerBtn = document.getElementById('closeBannerBtn');
+        if (closeBannerBtn) closeBannerBtn.addEventListener('click', () => {
+            document.getElementById('offlineBanner').style.display = 'none';
+        });
+    }
+    setupSettingsModal() {
+        const settingsBtn = document.getElementById('settingsBtn');
+        const modal = document.getElementById('settingsModal');
+        const closeBtn = document.getElementById('closeSettingsBtn');
+        const clearCacheBtn = document.getElementById('clearCacheBtn');
+        if (settingsBtn && modal) {
+            settingsBtn.addEventListener('click', () => modal.style.display = 'flex');
+            if (closeBtn) closeBtn.addEventListener('click', () => modal.style.display = 'none');
+            modal.addEventListener('click', (e) => { if(e.target === modal) modal.style.display = 'none'; });
+            if (clearCacheBtn) {
+                clearCacheBtn.addEventListener('click', async () => {
+                    if (confirm('هل أنت متأكد من مسح الكاش؟ سيتم حذف جميع الصور المخزنة والبيانات المؤقتة.')) {
+                        await this.storage.clearAllCache();
+                        alert('تم مسح الكاش بنجاح. سيتم إعادة تحميل البيانات عند تحديث الصفحة.');
+                        location.reload();
+                    }
+                });
+            }
+        }
+    }
+    setupCartModal() {
+        const cartIcon = document.getElementById('cartIconBtn');
+        const modal = document.getElementById('cartModal');
+        const closeBtn = document.getElementById('closeCartBtn');
+        const whatsappBtn = document.getElementById('cartModalWhatsappBtn');
+        if (cartIcon && modal) {
+            cartIcon.addEventListener('click', () => {
+                this.updateCartModal();
+                modal.style.display = 'flex';
+            });
+            if (closeBtn) closeBtn.addEventListener('click', () => modal.style.display = 'none');
+            modal.addEventListener('click', (e) => { if(e.target === modal) modal.style.display = 'none'; });
+            if (whatsappBtn) whatsappBtn.addEventListener('click', () => {
+                modal.style.display = 'none';
+                this.sendWhatsApp();
+            });
+        }
+    }
+    updateCartModal() {
+        const items = this.productsGrid.getAllCartItems();
+        const container = document.getElementById('cartItemsList');
+        const totalSpan = document.getElementById('cartModalTotal');
+        if (!container) return;
+        if (items.length === 0) {
+            container.innerHTML = '<div class="empty-cart-msg">السلة فارغة</div>';
+            if (totalSpan) totalSpan.innerText = '0';
+            return;
+        }
+        let total = 0;
+        let html = '';
+        items.forEach(item => {
+            const subtotal = item.quantity * item.price;
+            total += subtotal;
+            html += `
+                <div class="cart-item" data-name="${this.escapeHtml(item.name)}">
+                    <div class="cart-item-info">
+                        <div class="cart-item-name">${this.escapeHtml(item.name)}</div>
+                        <div class="cart-item-price">${item.price.toLocaleString()} ل.س</div>
+                        <div class="cart-item-qty">الكمية: ${item.quantity}</div>
+                    </div>
+                    <button class="cart-item-remove" data-name="${this.escapeHtml(item.name)}"><i class="fas fa-trash"></i></button>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+        if (totalSpan) totalSpan.innerText = total.toLocaleString();
+        // إضافة مستمعي حذف
+        container.querySelectorAll('.cart-item-remove').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const name = btn.getAttribute('data-name');
+                if (name && this.productsGrid.removeItemFromCart(name)) {
+                    this.updateTotal();
+                    this.updateCartModal();
+                    this.updateCartBadge();
+                }
+            });
+        });
+    }
+    updateCartBadge() {
+        const cartIcon = document.getElementById('cartIconBtn');
+        const badge = document.getElementById('cartCountBadge');
+        if (!cartIcon || !badge) return;
+        const items = this.productsGrid.getAllCartItems();
+        let totalQty = 0;
+        items.forEach(i => totalQty += i.quantity);
+        badge.innerText = totalQty;
+        badge.style.display = totalQty > 0 ? 'flex' : 'none';
+        cartIcon.style.display = 'inline-flex';
     }
     loadSavedCart() {
         const saved = localStorage.getItem('savedCart');
@@ -484,28 +743,41 @@ class App {
         }
     }
     async fetchFreshData() {
+        const skeleton = document.getElementById('skeletonContainer');
+        const productsContent = document.getElementById('productsContent');
         try {
             const response = await fetch(API_URL);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
             if (!data || typeof data !== 'object' || Object.keys(data).length === 0)
                 throw new Error("البيانات فارغة أو غير صالحة");
-            if (!this.fullData) this.renderFullData(data);
+            this.lastFetchTime = Date.now();
             await this.storage.saveApiCache(data);
+            this.renderFullData(data);
+            this.showOfflineBanner(false);
+            if (skeleton) skeleton.style.display = 'none';
+            if (productsContent) productsContent.style.display = 'block';
         } catch (err) {
             console.error(err);
-            const skeleton = document.getElementById('skeletonContainer');
-            if (skeleton) skeleton.style.display = 'none';
-            const productsContent = document.getElementById('productsContent');
-            if (productsContent && !this.fullData) {
-                productsContent.style.display = 'block';
-                productsContent.innerHTML = `<div class="loader">❌ فشل التحميل: ${err.message}<br><small>تأكد من اتصال الإنترنت وأن API يعمل</small></div>`;
+            if (!this.fullData) {
+                if (skeleton) skeleton.style.display = 'none';
+                if (productsContent) {
+                    productsContent.style.display = 'block';
+                    productsContent.innerHTML = `<div class="loader">❌ فشل التحميل: ${err.message}<br><small>تأكد من اتصال الإنترنت وأن API يعمل</small><br><button id="retryFetchBtn" class="retry-fetch-btn">إعادة المحاولة</button></div>`;
+                    const retry = document.getElementById('retryFetchBtn');
+                    if (retry) retry.addEventListener('click', () => this.fetchFreshData());
+                }
+            } else {
+                // توجد بيانات مخزنة، فقط أظهر البانر
+                this.showOfflineBanner(true, this.lastFetchTime);
             }
         }
     }
     renderFullData(data) {
         this.fullData = data;
         this.productsGrid.clear();
+        // مسح أزرار التصنيفات القديمة
+        this.categoryChips.clearAllExceptAll();
         const skeleton = document.getElementById('skeletonContainer');
         const productsContent = document.getElementById('productsContent');
         if (skeleton) skeleton.style.display = 'none';
@@ -522,8 +794,10 @@ class App {
             this.productsGrid.renderCategory(category, validProducts);
         }
         this.updateTotal();
+        this.updateCartBadge();
     }
     onCategorySelected(category) {
+        this.productsGrid.setActiveCategory(category);
         if (category === 'all') {
             window.scrollTo({ top: 0, behavior: 'smooth' });
             document.querySelectorAll('.category-section').forEach(section => section.style.display = 'block');
@@ -544,18 +818,12 @@ class App {
         this.cartFooter.updateTotal(total);
         this.lastTotalQty = totalQty;
         this.saveCart();
-    }
-    scrollToCart() {
-        const footer = document.getElementById('footer-cart');
-        if (footer) {
-            footer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            footer.style.boxShadow = '0 0 0 2px var(--primary)';
-            setTimeout(() => footer.style.boxShadow = '', 500);
-        }
+        this.updateCartBadge();
     }
     sendWhatsApp() {
         const items = this.productsGrid.getAllCartItems();
         if (items.length === 0) return;
+        if (!confirm(`هل تريد إرسال الطلب إلى واتساب؟\nالإجمالي: ${document.getElementById('grand-total').innerText} ل.س`)) return;
         let message = "";
         for (const item of items) {
             const sub = item.quantity * item.price;
@@ -579,13 +847,22 @@ class App {
             else { dayElements.style.display = 'block'; nightElements.style.display = 'none'; }
         }
     }
+    escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, (m) => {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
 }
 
 // بدء التطبيق
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => new App());
 else new App();
 
-// تسجيل Service Worker
+// تسجيل Service Worker (بعد التأكد من وجود الملف)
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
