@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <!-- Dexie.js لتحسين IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
@@ -12,14 +11,17 @@
 </head>
 <body>
 
-    <!-- طبقة الخلفية المتحركة -->
+    <!-- طبقة الخلفية المتحركة (غيوم + شمس + قمر) -->
     <div class="background-animation">
-        <div class="clouds-container day-elements">
+        <!-- عناصر النهار (شمس + غيوم) -->
+        <div class="day-elements">
+            <div class="sun"></div>
             <div class="cloud cloud1"></div>
             <div class="cloud cloud2"></div>
             <div class="cloud cloud3"></div>
             <div class="cloud cloud4"></div>
         </div>
+        <!-- عناصر الليل (قمر + نجوم) -->
         <div class="night-elements" style="display: none;">
             <div class="moon"></div>
             <div class="star star1"></div>
@@ -31,7 +33,7 @@
         </div>
     </div>
 
-    <!-- رأس التطبيق مع شعار متحرك -->
+    <!-- رأس التطبيق (بدون أزرار الصوت، الملف الشخصي، الإعدادات) -->
     <div class="header">
         <div class="logo-area">
             <svg class="animated-logo" width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -46,10 +48,6 @@
             <span class="app-name">Togven</span>
         </div>
         <div class="header-actions">
-            <button class="icon-btn" id="soundToggleBtn" title="تفعيل الصوت"><i id="soundIcon" class="fas fa-volume-mute"></i></button>
-            <button class="icon-btn" id="musicToggleBtn" title="موسيقى الخلفية"><i id="musicIcon" class="fas fa-music-slash"></i></button>
-            <button class="icon-btn" id="profileBtn" title="ملفي الشخصي"><i class="fas fa-user-astronaut"></i></button>
-            <button class="icon-btn" id="settingsBtn" title="الإعدادات"><i class="fas fa-cog"></i></button>
             <button class="icon-btn" id="themeToggleBtn"><i id="theme-icon" class="fas fa-moon"></i></button>
             <div class="cart-icon-wrapper">
                 <button class="icon-btn" id="cartIconBtn" title="عربة التسوق">
@@ -65,28 +63,12 @@
         <div id="searchResultCount" class="search-result-count"></div>
     </div>
 
-    <!-- شريط اللعب -->
-    <div class="gamification-bar" id="gamificationBar">
-        <div class="xp-info">
-            <i class="fas fa-star"></i>
-            <span id="xpPoints">0</span> XP
-        </div>
-        <div class="progress-container">
-            <div class="xp-progress" id="xpProgress" style="width:0%"></div>
-        </div>
-        <div class="level-info">
-            <i class="fas fa-trophy"></i>
-            <span id="levelNum">1</span>
-        </div>
-    </div>
-    <div class="badge-area" id="badgeArea"></div>
-
     <!-- أزرار التصنيفات -->
     <div class="chips-wrapper" id="category-chips">
         <div class="chip active" data-category="all">الكل</div>
     </div>
 
-    <!-- شريط تقدم تحميل الصور (سيظهر عند الحاجة) -->
+    <!-- شريط تقدم تحميل الصور -->
     <div id="imageProgressBar" class="image-progress-bar" style="display: none;">
         <div class="image-progress-fill" style="width:0%"></div>
     </div>
@@ -94,7 +76,6 @@
     <!-- حاوية المنتجات مع Skeleton Loading -->
     <div class="container product-container hero-view" id="main-container">
         <div class="skeleton-container" id="skeletonContainer">
-            <!-- 3 بطاقات skeleton كعينة -->
             <div class="skeleton-card"><div class="skeleton-image"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
             <div class="skeleton-card"><div class="skeleton-image"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
             <div class="skeleton-card"><div class="skeleton-image"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
@@ -102,7 +83,7 @@
         <div id="productsContent" style="display: none;"></div>
     </div>
 
-    <!-- الفوتر -->
+    <!-- فوتر السلة -->
     <div class="footer-cart" id="footer-cart">
         <div>
             <div style="font-size: 12px; opacity: 0.8;">الإجمالي النهائي:</div>
@@ -111,68 +92,7 @@
         <button id="whatsappBtn" class="whatsapp-send">إتمام الطلب <i class="fab fa-whatsapp"></i></button>
     </div>
 
-    <!-- مودال البروفايل -->
-    <div id="profileModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <span class="modal-close">&times;</span>
-                <h2><i class="fas fa-user-astronaut"></i> ملفي الشخصي</h2>
-            </div>
-            <div class="modal-body">
-                <div class="profile-level">
-                    <div class="profile-avatar">
-                        <i class="fas fa-crown"></i>
-                    </div>
-                    <div class="profile-stats">
-                        <p><strong>المستوى:</strong> <span id="profileLevel">1</span></p>
-                        <p><strong>نقاط الخبرة:</strong> <span id="profileXP">0</span> XP</p>
-                        <div class="profile-progress">
-                            <div class="profile-progress-bar" id="profileProgressBar" style="width:0%"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="profile-badges">
-                    <h3>الشارات</h3>
-                    <div id="profileBadgesList" class="badges-list">لا توجد شارات بعد</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- مودال الإعدادات (مضاف إليه زر مسح الكاش) -->
-    <div id="settingsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <span class="settings-close">&times;</span>
-                <h2><i class="fas fa-cog"></i> الإعدادات</h2>
-            </div>
-            <div class="modal-body">
-                <div class="setting-item">
-                    <label>🔊 المؤثرات الصوتية</label>
-                    <button id="settingsSoundBtn" class="settings-btn">تفعيل</button>
-                </div>
-                <div class="setting-item">
-                    <label>🎵 الموسيقى الخلفية</label>
-                    <button id="settingsMusicBtn" class="settings-btn">تفعيل</button>
-                </div>
-                <div class="setting-item">
-                    <label>📱 طريقة العرض</label>
-                    <button id="settingsViewBtn" class="settings-btn">وضع القائمة</button>
-                </div>
-                <div class="setting-item">
-                    <label>🗑️ مسح ذاكرة التخزين المؤقت</label>
-                    <button id="clearCacheBtn" class="settings-btn danger-btn">مسح الكاش</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- رسالة توضيحية للصوت (تظهر مرة واحدة) -->
-    <div id="soundNotice" class="sound-notice" style="display: none;">
-        ⚠️ يرجى النقر في أي مكان لتفعيل الصوت والموسيقى
-    </div>
-
-    <!-- صفحة عدم الاتصال (مخفية، تظهر عند الحاجة) -->
+    <!-- صفحة عدم الاتصال -->
     <div id="offlinePage" class="offline-page" style="display: none;">
         <i class="fas fa-wifi-slash"></i>
         <h2>أنت غير متصل بالإنترنت</h2>
