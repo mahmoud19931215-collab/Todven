@@ -31,16 +31,11 @@
         </div>
     </div>
 
-    <!-- رأس التطبيق (بدون شعار أو أزرار غير ضرورية) -->
+    <!-- رأس التطبيق (بدون أيقونة سلة) -->
     <div class="header">
         <div class="header-actions">
             <button class="icon-btn" id="themeToggleBtn" title="الوضع الليلي"><i id="theme-icon" class="fas fa-moon"></i></button>
-            <div class="cart-icon-wrapper">
-                <button class="icon-btn" id="cartIconBtn" title="عربة التسوق">
-                    <i class="fas fa-shopping-cart"></i>
-                    <span id="cartCount" class="cart-count">0</span>
-                </button>
-            </div>
+            <!-- تم إزالة أيقونة السلة من هنا -->
         </div>
         <div class="search-wrapper">
             <input type="text" id="search-input" placeholder="ابحث عما تريد...">
@@ -49,7 +44,7 @@
         <div id="searchResultCount" class="search-result-count"></div>
     </div>
 
-    <!-- أزرار التصنيفات (ستختفي جزئياً عند السكرول بفضل CSS) -->
+    <!-- أزرار التصنيفات -->
     <div class="chips-wrapper" id="category-chips">
         <div class="chip active" data-category="all">الكل</div>
     </div>
@@ -59,7 +54,7 @@
         <div class="image-progress-fill" style="width:0%"></div>
     </div>
 
-    <!-- حاوية المنتجات (مع تحميل تجزيئي للكميات الكبيرة) -->
+    <!-- حاوية المنتجات -->
     <div class="container product-container hero-view" id="main-container">
         <div class="skeleton-container" id="skeletonContainer">
             <div class="skeleton-card"><div class="skeleton-image"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
@@ -69,7 +64,7 @@
         <div id="productsContent" style="display: none;"></div>
     </div>
 
-    <!-- فوتر السلة -->
+    <!-- فوتر السلة (يبقى كما هو) -->
     <div class="footer-cart" id="footer-cart">
         <div>
             <div style="font-size: 12px; opacity: 0.8;">الإجمالي النهائي:</div>
