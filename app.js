@@ -266,6 +266,11 @@ class ProductsGrid {
                 price: card.getPrice()
             }));
     }
+    getTotalQuantity() {
+        let total = 0;
+        this.cards.forEach(({ card }) => total += card.getQuantity());
+        return total;
+    }
     scrollToCategory(category) {
         const section = document.getElementById(`section-${category}`);
         if (section) {
@@ -297,17 +302,19 @@ class CartFooter {
     }
 }
 
-// ==================== رأس التطبيق ====================
+// ==================== رأس التطبيق (مع السلة والعداد) ====================
 class AppHeader {
-    constructor(themeBtnId, viewBtnId, searchInputId, soundBtnId, onThemeToggle, onViewToggle, onSearch, onSoundToggle) {
+    constructor(themeBtnId, viewBtnId, searchInputId, soundBtnId, cartBtnId, onThemeToggle, onViewToggle, onSearch, onSoundToggle, onCartClick) {
         this.themeBtn = document.getElementById(themeBtnId);
         this.viewBtn = document.getElementById(viewBtnId);
         this.searchInput = document.getElementById(searchInputId);
         this.soundBtn = document.getElementById(soundBtnId);
+        this.cartBtn = document.getElementById(cartBtnId);
         this.onThemeToggle = onThemeToggle;
         this.onViewToggle = onViewToggle;
         this.onSearch = onSearch;
         this.onSoundToggle = onSoundToggle;
+        this.onCartClick = onCartClick;
         this.init();
     }
     init() {
@@ -315,6 +322,7 @@ class AppHeader {
         if (this.viewBtn) this.viewBtn.addEventListener('click', () => this.onViewToggle());
         if (this.searchInput) this.searchInput.addEventListener('input', (e) => this.onSearch(e.target.value));
         if (this.soundBtn) this.soundBtn.addEventListener('click', () => this.onSoundToggle());
+        if (this.cartBtn) this.cartBtn.addEventListener('click', () => this.onCartClick());
     }
     setViewIcon(isList) {
         if (!this.viewBtn) return;
@@ -322,6 +330,13 @@ class AppHeader {
         if (icon) {
             if (isList) icon.className = 'fas fa-square';
             else icon.className = 'fas fa-list';
+        }
+    }
+    updateCartCount(count) {
+        const counter = document.getElementById('cartCount');
+        if (counter) {
+            counter.innerText = count;
+            counter.style.display = count > 0 ? 'flex' : 'none';
         }
     }
 }
@@ -480,11 +495,12 @@ class App {
         }, this.soundManager);
         this.cartFooter = new CartFooter('footer-cart', 'grand-total', () => this.sendWhatsApp());
         this.header = new AppHeader(
-            'themeToggleBtn', 'viewToggleBtn', 'search-input', 'soundToggleBtn',
+            'themeToggleBtn', 'viewToggleBtn', 'search-input', 'soundToggleBtn', 'cartIconBtn',
             () => this.toggleTheme(),
             () => this.toggleView(),
             (query) => this.productsGrid.filterBySearch(query),
-            () => this.toggleSound()
+            () => this.toggleSound(),
+            () => this.scrollToCart()
         );
         this.categoryChips = new CategoryChips('category-chips', (cat) => this.onCategorySelected(cat));
         const cachedData = await this.storage.getApiCache();
@@ -542,11 +558,28 @@ class App {
             totalQty += item.quantity;
         }
         this.cartFooter.updateTotal(total);
+        // تحديث عداد أيقونة السلة
+        if (this.header) {
+            this.header.updateCartCount(totalQty);
+        }
         if (this.lastTotalQty !== totalQty && totalQty > this.lastTotalQty) {
             const gained = (totalQty - this.lastTotalQty) * 5;
             this.game.addXP(gained, productName || 'منتج');
         }
         this.lastTotalQty = totalQty;
+    }
+    scrollToCart() {
+        // تمرير سلس إلى الفوتر
+        const footer = document.getElementById('footer-cart');
+        if (footer) {
+            footer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            // إضافة تأثير وميض بسيط
+            footer.style.transition = 'box-shadow 0.3s';
+            footer.style.boxShadow = '0 0 0 2px var(--primary)';
+            setTimeout(() => {
+                footer.style.boxShadow = '';
+            }, 500);
+        }
     }
     sendWhatsApp() {
         const items = this.productsGrid.getAllCartItems();
@@ -589,8 +622,7 @@ class App {
         if (searchVal) this.productsGrid.filterBySearch(searchVal.value);
     }
     toggleSound() {
-        const enabled = this.soundManager.toggle();
-        console.log("الصوت", enabled ? "مفعل" : "معطل");
+        this.soundManager.toggle();
     }
 }
 
