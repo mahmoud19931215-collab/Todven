@@ -2,8 +2,10 @@
 <html lang="ar">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Dexie.js لتحسين IndexedDB -->
+    <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
     <title>Togven</title>
@@ -29,20 +31,38 @@
         </div>
     </div>
 
-    <!-- رأس التطبيق -->
+    <!-- رأس التطبيق مع شعار متحرك -->
     <div class="header">
-        <button class="icon-btn" id="soundToggleBtn" title="تفعيل الصوت"><i id="soundIcon" class="fas fa-volume-mute"></i></button>
-        <button class="icon-btn" id="musicToggleBtn" title="موسيقى الخلفية"><i id="musicIcon" class="fas fa-music-slash"></i></button>
-        <button class="icon-btn" id="profileBtn" title="ملفي الشخصي"><i class="fas fa-user-astronaut"></i></button>
-        <button class="icon-btn" id="settingsBtn" title="الإعدادات"><i class="fas fa-cog"></i></button>
-        <button class="icon-btn" id="themeToggleBtn"><i id="theme-icon" class="fas fa-moon"></i></button>
-        <div class="cart-icon-wrapper">
-            <button class="icon-btn" id="cartIconBtn" title="عربة التسوق">
-                <i class="fas fa-shopping-cart"></i>
-                <span id="cartCount" class="cart-count">0</span>
-            </button>
+        <div class="logo-area">
+            <svg class="animated-logo" width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="#2ecc71" stroke-width="4" stroke-dasharray="283" stroke-dashoffset="70">
+                    <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="4s" repeatCount="indefinite" />
+                </circle>
+                <polygon points="50,20 61,40 85,45 68,62 72,86 50,75 28,86 32,62 15,45 39,40" fill="#f1c40f" stroke="#e67e22" stroke-width="2">
+                    <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" repeatCount="indefinite" />
+                </polygon>
+                <text x="50" y="68" text-anchor="middle" fill="#2c3e50" font-size="20" font-weight="bold" font-family="Arial">T</text>
+            </svg>
+            <span class="app-name">Togven</span>
         </div>
-        <input type="text" id="search-input" placeholder="ابحث عما تريد...">
+        <div class="header-actions">
+            <button class="icon-btn" id="soundToggleBtn" title="تفعيل الصوت"><i id="soundIcon" class="fas fa-volume-mute"></i></button>
+            <button class="icon-btn" id="musicToggleBtn" title="موسيقى الخلفية"><i id="musicIcon" class="fas fa-music-slash"></i></button>
+            <button class="icon-btn" id="profileBtn" title="ملفي الشخصي"><i class="fas fa-user-astronaut"></i></button>
+            <button class="icon-btn" id="settingsBtn" title="الإعدادات"><i class="fas fa-cog"></i></button>
+            <button class="icon-btn" id="themeToggleBtn"><i id="theme-icon" class="fas fa-moon"></i></button>
+            <div class="cart-icon-wrapper">
+                <button class="icon-btn" id="cartIconBtn" title="عربة التسوق">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span id="cartCount" class="cart-count">0</span>
+                </button>
+            </div>
+        </div>
+        <div class="search-wrapper">
+            <input type="text" id="search-input" placeholder="ابحث عما تريد...">
+            <button id="clearSearchBtn" class="clear-search-btn" style="display: none;">✖</button>
+        </div>
+        <div id="searchResultCount" class="search-result-count"></div>
     </div>
 
     <!-- شريط اللعب -->
@@ -66,9 +86,20 @@
         <div class="chip active" data-category="all">الكل</div>
     </div>
 
-    <!-- حاوية المنتجات -->
+    <!-- شريط تقدم تحميل الصور (سيظهر عند الحاجة) -->
+    <div id="imageProgressBar" class="image-progress-bar" style="display: none;">
+        <div class="image-progress-fill" style="width:0%"></div>
+    </div>
+
+    <!-- حاوية المنتجات مع Skeleton Loading -->
     <div class="container product-container hero-view" id="main-container">
-        <div class="loader" id="loader"><i class="fas fa-spinner fa-spin"></i> جاري تحميل المنتجات...</div>
+        <div class="skeleton-container" id="skeletonContainer">
+            <!-- 3 بطاقات skeleton كعينة -->
+            <div class="skeleton-card"><div class="skeleton-image"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
+            <div class="skeleton-card"><div class="skeleton-image"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
+            <div class="skeleton-card"><div class="skeleton-image"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
+        </div>
+        <div id="productsContent" style="display: none;"></div>
     </div>
 
     <!-- الفوتر -->
@@ -108,7 +139,7 @@
         </div>
     </div>
 
-    <!-- مودال الإعدادات -->
+    <!-- مودال الإعدادات (مضاف إليه زر مسح الكاش) -->
     <div id="settingsModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -128,8 +159,25 @@
                     <label>📱 طريقة العرض</label>
                     <button id="settingsViewBtn" class="settings-btn">وضع القائمة</button>
                 </div>
+                <div class="setting-item">
+                    <label>🗑️ مسح ذاكرة التخزين المؤقت</label>
+                    <button id="clearCacheBtn" class="settings-btn danger-btn">مسح الكاش</button>
+                </div>
             </div>
         </div>
+    </div>
+
+    <!-- رسالة توضيحية للصوت (تظهر مرة واحدة) -->
+    <div id="soundNotice" class="sound-notice" style="display: none;">
+        ⚠️ يرجى النقر في أي مكان لتفعيل الصوت والموسيقى
+    </div>
+
+    <!-- صفحة عدم الاتصال (مخفية، تظهر عند الحاجة) -->
+    <div id="offlinePage" class="offline-page" style="display: none;">
+        <i class="fas fa-wifi-slash"></i>
+        <h2>أنت غير متصل بالإنترنت</h2>
+        <p>يرجى التحقق من اتصالك ثم إعادة المحاولة.</p>
+        <button id="retryConnectionBtn">إعادة المحاولة</button>
     </div>
 
     <script src="app.js" type="module"></script>
