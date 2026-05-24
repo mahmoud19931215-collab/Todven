@@ -1,27 +1,20 @@
-
 // ==================== Service Worker لتطبيق Togven ====================
-const CACHE_NAME = 'togven-v1.0.0';
-const OFFLINE_URL = '/offline.html'; // سيتم إنشاؤها لاحقاً
+const CACHE_NAME = 'togven-v1.0.1';
+const OFFLINE_URL = '/offline.html';
 
-// الملفات التي سيتم تخزينها مسبقاً (Pre-cache)
+// الملفات التي سيتم تخزينها مسبقاً (Pre-cache) - بدون الأيقونات المفقودة
 const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/style.css',
   '/app.js',
   '/manifest.json',
+  '/offline.html',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
-  'https://unpkg.com/dexie@3.2.4/dist/dexie.js'
+  'https://unpkg.com/dexie@3.2.4/dist/dexie.js',
+  'https://cdn.jsdelivr.net/npm/promise-polyfill@8/dist/polyfill.min.js',
+  'https://cdn.jsdelivr.net/npm/whatwg-fetch@3.6.2/dist/fetch.umd.js'
 ];
-
-// أيقونات PWA (إذا كانت موجودة)
-const ICON_URLS = [
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
-];
-
-// دمج الأيقونات مع الملفات الأساسية
-const ALL_CACHE_URLS = [...PRECACHE_URLS, ...ICON_URLS];
 
 // تثبيت Service Worker وتخزين الملفات الأساسية
 self.addEventListener('install', event => {
@@ -30,7 +23,7 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME)
       .then(cache => {
         console.log('[SW] Caching app shell');
-        return cache.addAll(ALL_CACHE_URLS);
+        return cache.addAll(PRECACHE_URLS);
       })
       .then(() => self.skipWaiting())
   );
@@ -63,7 +56,6 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(request)
         .then(response => {
-          // تخزين نسخة من API في الكاش مؤقتاً (لمدة ساعة)
           const clonedResponse = response.clone();
           caches.open(CACHE_NAME).then(cache => {
             cache.put(request, clonedResponse);
@@ -71,10 +63,8 @@ self.addEventListener('fetch', event => {
           return response;
         })
         .catch(() => {
-          // إذا فشل الشبكة، أحضر من الكاش (إن وجد)
           return caches.match(request).then(cached => {
             if (cached) return cached;
-            // إذا لم يكن هناك كاش، أعد استجابة مخصصة
             return new Response(JSON.stringify({ error: 'offline' }), {
               status: 503,
               headers: { 'Content-Type': 'application/json' }
@@ -85,8 +75,8 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // طلب الصور والمجلدات /icons/ (استراتيجية Cache First)
-  if (request.destination === 'image' || url.pathname.startsWith('/icons/')) {
+  // طلب الصور (استراتيجية Cache First)
+  if (request.destination === 'image') {
     event.respondWith(
       caches.match(request).then(cached => {
         if (cached) return cached;
@@ -95,7 +85,6 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE_NAME).then(cache => cache.put(request, cloned));
           return response;
         }).catch(() => {
-          // صورة افتراضية في حالة عدم الاتصال
           return new Response('', { status: 404 });
         });
       })
@@ -108,14 +97,12 @@ self.addEventListener('fetch', event => {
     caches.match(request).then(cached => {
       if (cached) return cached;
       return fetch(request).then(response => {
-        // تخزين نسخة فقط للملفات الناجحة
         if (response.ok && request.method === 'GET') {
           const cloned = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(request, cloned));
         }
         return response;
       }).catch(() => {
-        // إذا كان الطلب لصفحة HTML، أعد صفحة offline
         if (request.headers.get('accept').includes('text/html')) {
           return caches.match(OFFLINE_URL);
         }
@@ -125,7 +112,7 @@ self.addEventListener('fetch', event => {
   );
 });
 
-// معالجة رسائل من صفحة التطبيق (مثل طلب مسح الكاش)
+// معالجة رسائل من صفحة التطبيق
 self.addEventListener('message', event => {
   if (event.data && event.data.action === 'clearCache') {
     caches.delete(CACHE_NAME).then(() => {
