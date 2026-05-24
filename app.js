@@ -2,27 +2,31 @@
 const TARGET_NUMBER = "963945083365";
 const API_URL = "https://script.google.com/macros/s/AKfycbz8CnO-_aiuboqy7R4kXFA-FQ4uNaLAVc5-_aC-z6txmg2W33wG7c4Igj_NJeKGF-fk/exec";
 
-// ==================== إدارة الصوت ====================
+// ==================== إدارة الصوت والموسيقى ====================
 class SoundManager {
     constructor() {
         this.soundEnabled = false;
+        this.musicEnabled = false;
+        this.musicAudio = null;
         this.init();
     }
     init() {
-        this.clickSound = null;
-        this.levelUpSound = null;
-        this.orderSound = null;
-        this.initSounds();
-        const saved = localStorage.getItem('soundEnabled');
-        if (saved === 'true') this.soundEnabled = true;
-        this.updateIcon();
+        this.clickSound = () => this.playBeep(440, 0.1);
+        this.levelUpSound = () => this.playBeep(880, 0.3, 600);
+        this.orderSound = () => this.playBeep(660, 0.4, 800);
+        const savedSound = localStorage.getItem('soundEnabled');
+        if (savedSound === 'true') this.soundEnabled = true;
+        const savedMusic = localStorage.getItem('musicEnabled');
+        if (savedMusic === 'true') this.musicEnabled = true;
+        this.updateIcons();
+        this.initMusic();
     }
-    initSounds() {
+    initMusic() {
         try {
-            this.clickSound = () => this.playBeep(440, 0.1);
-            this.levelUpSound = () => this.playBeep(880, 0.3, 600);
-            this.orderSound = () => this.playBeep(660, 0.4, 800);
-        } catch(e) { console.warn("Audio not supported"); }
+            this.musicAudio = new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3');
+            this.musicAudio.loop = true;
+            this.musicAudio.volume = 0.3;
+        } catch(e) { console.warn("Music not available"); }
     }
     playBeep(frequency, duration, delay = 0) {
         if (!this.soundEnabled) return;
@@ -44,19 +48,32 @@ class SoundManager {
     playClick() { if(this.clickSound) this.clickSound(); }
     playLevelUp() { if(this.levelUpSound) this.levelUpSound(); }
     playOrder() { if(this.orderSound) this.orderSound(); }
-    toggle() {
+    toggleSound() {
         this.soundEnabled = !this.soundEnabled;
         localStorage.setItem('soundEnabled', this.soundEnabled);
-        this.updateIcon();
+        this.updateIcons();
         return this.soundEnabled;
     }
-    updateIcon() {
-        const icon = document.getElementById('soundIcon');
-        if (icon) icon.className = this.soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute';
+    toggleMusic() {
+        this.musicEnabled = !this.musicEnabled;
+        localStorage.setItem('musicEnabled', this.musicEnabled);
+        if (this.musicEnabled && this.musicAudio) {
+            this.musicAudio.play().catch(e => console.log("Music autoplay blocked"));
+        } else if (this.musicAudio) {
+            this.musicAudio.pause();
+        }
+        this.updateIcons();
+        return this.musicEnabled;
+    }
+    updateIcons() {
+        const soundIcon = document.getElementById('soundIcon');
+        if (soundIcon) soundIcon.className = this.soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute';
+        const musicIcon = document.getElementById('musicIcon');
+        if (musicIcon) musicIcon.className = this.musicEnabled ? 'fas fa-music' : 'fas fa-music-slash';
     }
 }
 
-// ==================== خدمة التخزين (IndexedDB) ====================
+// ==================== خدمة التخزين (IndexedDB + LocalStorage للسلة) ====================
 const DB_NAME = "RogvenImageCache";
 const IMAGE_STORE = "images";
 const API_CACHE_STORE = "apiCache";
@@ -116,6 +133,14 @@ class StorageService {
         const tx = this.db.transaction([API_CACHE_STORE], "readwrite");
         tx.objectStore(API_CACHE_STORE).put({ timestamp: Date.now(), data }, "mainData");
     }
+    // حفظ حالة السلة
+    saveCartState(cartItems) {
+        localStorage.setItem('savedCart', JSON.stringify(cartItems));
+    }
+    loadCartState() {
+        const saved = localStorage.getItem('savedCart');
+        return saved ? JSON.parse(saved) : [];
+    }
 }
 
 // ==================== تحميل الصور ====================
@@ -138,14 +163,14 @@ class LazyImage {
     }
 }
 
-// ==================== بطاقة المنتج ====================
+// ==================== بطاقة المنتج مع حفظ الحالة ====================
 class ProductCard {
-    constructor(product, storage, onUpdateTotal, soundManager) {
+    constructor(product, storage, onUpdateTotal, soundManager, initialQty = 0) {
         this.product = product;
         this.storage = storage;
         this.onUpdateTotal = onUpdateTotal;
         this.sound = soundManager;
-        this.quantity = 0;
+        this.quantity = initialQty;
         this.element = null;
         this.qtyInput = null;
         this.subtotalSpan = null;
@@ -166,7 +191,7 @@ class ProductCard {
                 <div class="item-subtotal" style="display: none;">المجموع: <span class="subtotal-val">0</span> ل.س</div>
                 <div class="quantity-controls">
                     <button class="btn-qty inc-qty" style="background: var(--primary)">+</button>
-                    <input type="number" class="qty-input" value="0" readonly>
+                    <input type="number" class="qty-input" value="${this.quantity}" readonly>
                     <button class="btn-qty dec-qty">-</button>
                 </div>
             </div>
@@ -181,25 +206,33 @@ class ProductCard {
         decBtn.addEventListener('click', () => { this.sound.playClick(); this.updateQuantity(-1); });
         const imgEl = cardDiv.querySelector(`#${uniqueId}`);
         LazyImage.render(imgEl, this.product.imageUrl, this.storage);
+        this.updateUI();
         return cardDiv;
+    }
+    updateUI() {
+        this.qtyInput.value = this.quantity;
+        if (this.quantity > 0) {
+            const subtotal = this.quantity * this.product.price;
+            this.subtotalSpan.innerText = subtotal.toLocaleString();
+            this.subtotalRow.style.display = 'block';
+        } else {
+            this.subtotalRow.style.display = 'none';
+        }
     }
     updateQuantity(delta) {
         const newVal = this.quantity + delta;
         const stock = parseInt(this.element.getAttribute('data-stock')) || 999;
         if (newVal >= 0 && newVal <= stock) {
+            const wasZero = this.quantity === 0;
             this.quantity = newVal;
-            this.qtyInput.value = this.quantity;
-            if (this.quantity > 0) {
-                const subtotal = this.quantity * this.product.price;
-                this.subtotalSpan.innerText = subtotal.toLocaleString();
-                this.subtotalRow.style.display = 'block';
-            } else {
-                this.subtotalRow.style.display = 'none';
-            }
+            this.updateUI();
             this.element.classList.add('added');
             setTimeout(() => this.element.classList.remove('added'), 300);
-            if (this.onUpdateTotal) {
-                this.onUpdateTotal(delta > 0 ? this.product.name : null);
+            if (delta > 0 && wasZero && this.onUpdateTotal) {
+                // أول إضافة لهذا المنتج
+                this.onUpdateTotal(this.product.name, true);
+            } else if (this.onUpdateTotal) {
+                this.onUpdateTotal(delta > 0 ? this.product.name : null, false);
             }
         }
     }
@@ -219,13 +252,14 @@ class ProductCard {
 
 // ==================== شبكة المنتجات ====================
 class ProductsGrid {
-    constructor(containerId, storage, onTotalUpdate, soundManager) {
+    constructor(containerId, storage, onTotalUpdate, soundManager, savedCart) {
         this.container = document.getElementById(containerId);
         this.storage = storage;
         this.onTotalUpdate = onTotalUpdate;
         this.sound = soundManager;
         this.cards = [];
         this.currentView = 'hero';
+        this.savedCart = savedCart; // map product name -> quantity
     }
     renderCategory(category, products) {
         const sectionId = `section-${category}`;
@@ -233,7 +267,8 @@ class ProductsGrid {
         this.container.insertAdjacentHTML('beforeend', sectionHtml);
         const sectionEl = document.getElementById(sectionId);
         products.forEach(product => {
-            const card = new ProductCard(product, this.storage, (productName) => this.onTotalUpdate(productName), this.sound);
+            const savedQty = this.savedCart[product.name] || 0;
+            const card = new ProductCard(product, this.storage, (productName, isFirst) => this.onTotalUpdate(productName, isFirst), this.sound, savedQty);
             const cardElement = card.render();
             sectionEl.appendChild(cardElement);
             this.cards.push({ category, card, sectionElement: sectionEl });
@@ -265,6 +300,13 @@ class ProductsGrid {
                 quantity: card.getQuantity(),
                 price: card.getPrice()
             }));
+    }
+    getCartMap() {
+        const map = {};
+        this.cards.forEach(({ card }) => {
+            if (card.getQuantity() > 0) map[card.getName()] = card.getQuantity();
+        });
+        return map;
     }
     getTotalQuantity() {
         let total = 0;
@@ -302,18 +344,22 @@ class CartFooter {
     }
 }
 
-// ==================== رأس التطبيق (مع السلة والعداد) ====================
+// ==================== رأس التطبيق ====================
 class AppHeader {
-    constructor(themeBtnId, viewBtnId, searchInputId, soundBtnId, cartBtnId, onThemeToggle, onViewToggle, onSearch, onSoundToggle, onCartClick) {
+    constructor(themeBtnId, viewBtnId, searchInputId, soundBtnId, musicBtnId, profileBtnId, cartBtnId, onThemeToggle, onViewToggle, onSearch, onSoundToggle, onMusicToggle, onProfileOpen, onCartClick) {
         this.themeBtn = document.getElementById(themeBtnId);
         this.viewBtn = document.getElementById(viewBtnId);
         this.searchInput = document.getElementById(searchInputId);
         this.soundBtn = document.getElementById(soundBtnId);
+        this.musicBtn = document.getElementById(musicBtnId);
+        this.profileBtn = document.getElementById(profileBtnId);
         this.cartBtn = document.getElementById(cartBtnId);
         this.onThemeToggle = onThemeToggle;
         this.onViewToggle = onViewToggle;
         this.onSearch = onSearch;
         this.onSoundToggle = onSoundToggle;
+        this.onMusicToggle = onMusicToggle;
+        this.onProfileOpen = onProfileOpen;
         this.onCartClick = onCartClick;
         this.init();
     }
@@ -322,6 +368,8 @@ class AppHeader {
         if (this.viewBtn) this.viewBtn.addEventListener('click', () => this.onViewToggle());
         if (this.searchInput) this.searchInput.addEventListener('input', (e) => this.onSearch(e.target.value));
         if (this.soundBtn) this.soundBtn.addEventListener('click', () => this.onSoundToggle());
+        if (this.musicBtn) this.musicBtn.addEventListener('click', () => this.onMusicToggle());
+        if (this.profileBtn) this.profileBtn.addEventListener('click', () => this.onProfileOpen());
         if (this.cartBtn) this.cartBtn.addEventListener('click', () => this.onCartClick());
     }
     setViewIcon(isList) {
@@ -369,7 +417,7 @@ class CategoryChips {
     }
 }
 
-// ==================== نظام اللعب (Gamification) ====================
+// ==================== نظام اللعب مع تأثيرات بصرية ====================
 class Gamification {
     constructor(soundManager) {
         this.sound = soundManager;
@@ -395,13 +443,30 @@ class Gamification {
             badges: this.badges
         }));
     }
-    addXP(amount, productName = '') {
+    addXP(amount, productName = '', isFirstAdd = false) {
         this.xp += amount;
         this.showToast(`+${amount} XP`, productName);
+        if (isFirstAdd) {
+            this.showFirstAddEffect();
+        }
         this.checkLevelUp();
         this.checkBadges();
         this.updateUI();
         this.saveToStorage();
+    }
+    showFirstAddEffect() {
+        const toast = document.createElement('div');
+        toast.className = 'toast-points';
+        toast.innerHTML = '🎉 أول إضافة! 🎉';
+        toast.style.background = '#f39c12';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 1000);
+        // تأثير على الشريط
+        const bar = document.querySelector('.gamification-bar');
+        if (bar) {
+            bar.classList.add('first-add-effect');
+            setTimeout(() => bar.classList.remove('first-add-effect'), 500);
+        }
     }
     checkLevelUp() {
         let newLevel = 1;
@@ -412,6 +477,19 @@ class Gamification {
             this.level = newLevel;
             this.sound.playLevelUp();
             this.showToast(`🎉 رفعت لمستوى ${this.level} ! 🎉`, '', 2000);
+            this.showLevelUpEffect();
+        }
+    }
+    showLevelUpEffect() {
+        const levelSpan = document.getElementById('levelNum');
+        if (levelSpan) {
+            levelSpan.classList.add('level-up-animation');
+            setTimeout(() => levelSpan.classList.remove('level-up-animation'), 600);
+        }
+        const trophy = document.querySelector('.level-info i');
+        if (trophy) {
+            trophy.style.animation = 'none';
+            setTimeout(() => trophy.style.animation = 'levelUpEffect 0.6s', 10);
         }
     }
     checkBadges() {
@@ -447,6 +525,7 @@ class Gamification {
             const percent = (xpInCurrentLevel / 100) * 100;
             progressFill.style.width = `${percent}%`;
         }
+        this.updateProfileModal();
     }
     updateBadgesUI() {
         const badgeArea = document.getElementById('badgeArea');
@@ -471,6 +550,33 @@ class Gamification {
             badgeArea.appendChild(badge);
         }
     }
+    updateProfileModal() {
+        const profileLevel = document.getElementById('profileLevel');
+        const profileXP = document.getElementById('profileXP');
+        const profileBar = document.getElementById('profileProgressBar');
+        const badgesList = document.getElementById('profileBadgesList');
+        if (profileLevel) profileLevel.innerText = this.level;
+        if (profileXP) profileXP.innerText = this.xp;
+        if (profileBar) {
+            const percent = (this.xp % 100) / 100 * 100;
+            profileBar.style.width = `${percent}%`;
+        }
+        if (badgesList) {
+            badgesList.innerHTML = '';
+            if (this.badges.length === 0) {
+                badgesList.innerHTML = 'لا توجد شارات بعد';
+            } else {
+                this.badges.forEach(b => {
+                    const badgeDiv = document.createElement('div');
+                    badgeDiv.className = 'badge-item';
+                    if (b === 'starter') badgeDiv.innerHTML = '<i class="fas fa-seedling"></i> مبتدئ';
+                    else if (b === 'warrior') badgeDiv.innerHTML = '<i class="fas fa-shield-alt"></i> محارب';
+                    else if (b === 'legend') badgeDiv.innerHTML = '<i class="fas fa-crown"></i> أسطوري';
+                    badgesList.appendChild(badgeDiv);
+                });
+            }
+        }
+    }
 }
 
 // ==================== التطبيق الرئيسي ====================
@@ -478,34 +584,68 @@ class App {
     constructor() {
         this.soundManager = new SoundManager();
         this.storage = new StorageService();
-        this.game = new Gamification(this.soundManager);
+        this.game = null;
         this.productsGrid = null;
         this.cartFooter = null;
         this.header = null;
         this.categoryChips = null;
         this.fullData = null;
         this.lastTotalQty = 0;
-        window.gameInstance = this.game;
+        this.savedCart = {}; // سيتم تحميله من localStorage
         this.init();
     }
     async init() {
         await this.storage.init();
-        this.productsGrid = new ProductsGrid('main-container', this.storage, (productName) => {
-            this.updateTotal(productName);
-        }, this.soundManager);
+        this.loadSavedCart();
+        this.game = new Gamification(this.soundManager);
+        this.productsGrid = new ProductsGrid('main-container', this.storage, (productName, isFirst) => {
+            this.updateTotal(productName, isFirst);
+        }, this.soundManager, this.savedCart);
         this.cartFooter = new CartFooter('footer-cart', 'grand-total', () => this.sendWhatsApp());
         this.header = new AppHeader(
-            'themeToggleBtn', 'viewToggleBtn', 'search-input', 'soundToggleBtn', 'cartIconBtn',
+            'themeToggleBtn', 'viewToggleBtn', 'search-input', 'soundToggleBtn', 'musicToggleBtn', 'profileBtn', 'cartIconBtn',
             () => this.toggleTheme(),
             () => this.toggleView(),
             (query) => this.productsGrid.filterBySearch(query),
             () => this.toggleSound(),
+            () => this.toggleMusic(),
+            () => this.openProfileModal(),
             () => this.scrollToCart()
         );
         this.categoryChips = new CategoryChips('category-chips', (cat) => this.onCategorySelected(cat));
+        this.setupModal();
         const cachedData = await this.storage.getApiCache();
         if (cachedData) this.renderFullData(cachedData);
         this.fetchFreshData();
+    }
+    loadSavedCart() {
+        const saved = localStorage.getItem('savedCart');
+        if (saved) {
+            this.savedCart = JSON.parse(saved);
+        } else {
+            this.savedCart = {};
+        }
+    }
+    saveCart() {
+        if (this.productsGrid) {
+            const cartMap = this.productsGrid.getCartMap();
+            localStorage.setItem('savedCart', JSON.stringify(cartMap));
+        }
+    }
+    setupModal() {
+        const modal = document.getElementById('profileModal');
+        const closeBtn = document.querySelector('.modal-close');
+        if (closeBtn) {
+            closeBtn.onclick = () => modal.style.display = 'none';
+        }
+        window.onclick = (event) => {
+            if (event.target === modal) modal.style.display = 'none';
+        };
+    }
+    openProfileModal() {
+        this.game.updateProfileModal();
+        const modal = document.getElementById('profileModal');
+        if (modal) modal.style.display = 'block';
     }
     async fetchFreshData() {
         try {
@@ -550,7 +690,7 @@ class App {
             this.productsGrid.scrollToCategory(category);
         }
     }
-    updateTotal(productName = null) {
+    updateTotal(productName = null, isFirst = false) {
         const items = this.productsGrid.getAllCartItems();
         let total = 0, totalQty = 0;
         for (const item of items) {
@@ -558,27 +698,21 @@ class App {
             totalQty += item.quantity;
         }
         this.cartFooter.updateTotal(total);
-        // تحديث عداد أيقونة السلة
-        if (this.header) {
-            this.header.updateCartCount(totalQty);
-        }
+        if (this.header) this.header.updateCartCount(totalQty);
         if (this.lastTotalQty !== totalQty && totalQty > this.lastTotalQty) {
             const gained = (totalQty - this.lastTotalQty) * 5;
-            this.game.addXP(gained, productName || 'منتج');
+            this.game.addXP(gained, productName || 'منتج', isFirst);
         }
         this.lastTotalQty = totalQty;
+        this.saveCart(); // حفظ حالة السلة بعد كل تغيير
     }
     scrollToCart() {
-        // تمرير سلس إلى الفوتر
         const footer = document.getElementById('footer-cart');
         if (footer) {
             footer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            // إضافة تأثير وميض بسيط
             footer.style.transition = 'box-shadow 0.3s';
             footer.style.boxShadow = '0 0 0 2px var(--primary)';
-            setTimeout(() => {
-                footer.style.boxShadow = '';
-            }, 500);
+            setTimeout(() => footer.style.boxShadow = '', 500);
         }
     }
     sendWhatsApp() {
@@ -595,6 +729,7 @@ class App {
         message += `💰 *الإجمالي النهائي: ${totalSpan ? totalSpan.innerText : '0'} ل.س*`;
         window.open(`https://wa.me/${TARGET_NUMBER}?text=${encodeURIComponent(message)}`);
         this.game.addXP(20, 'إتمام الطلب');
+        // لا نمسح السلة بعد الإرسال، يمكن للمستخدم إعادة الإرسال
     }
     toggleTheme() {
         const body = document.body;
@@ -622,7 +757,10 @@ class App {
         if (searchVal) this.productsGrid.filterBySearch(searchVal.value);
     }
     toggleSound() {
-        this.soundManager.toggle();
+        this.soundManager.toggleSound();
+    }
+    toggleMusic() {
+        this.soundManager.toggleMusic();
     }
 }
 
