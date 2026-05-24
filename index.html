@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+    <!-- Polyfills للمتصفحات القديمة -->
+    <script src="https://cdn.jsdelivr.net/npm/promise-polyfill@8/dist/polyfill.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/whatwg-fetch@3.6.2/dist/fetch.umd.js"></script>
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
     <title>Togven</title>
@@ -31,11 +34,12 @@
         </div>
     </div>
 
-    <!-- رأس التطبيق (بدون أيقونة سلة) -->
+    <!-- رأس التطبيق -->
     <div class="header">
         <div class="header-actions">
             <button class="icon-btn" id="themeToggleBtn" title="الوضع الليلي"><i id="theme-icon" class="fas fa-moon"></i></button>
-            <!-- تم إزالة أيقونة السلة من هنا -->
+            <button class="icon-btn" id="cartIconBtn" title="عرض السلة" style="display: none;"><i class="fas fa-shopping-cart"></i><span id="cartCountBadge" class="cart-count">0</span></button>
+            <button class="icon-btn" id="settingsBtn" title="الإعدادات"><i class="fas fa-cog"></i></button>
         </div>
         <div class="search-wrapper">
             <input type="text" id="search-input" placeholder="ابحث عما تريد...">
@@ -47,6 +51,17 @@
     <!-- أزرار التصنيفات -->
     <div class="chips-wrapper" id="category-chips">
         <div class="chip active" data-category="all">الكل</div>
+    </div>
+
+    <!-- رسالة الوضع غير المتصل (نسخة مخبأة) -->
+    <div id="offlineBanner" class="offline-banner" style="display: none;">
+        <div class="offline-banner-content">
+            <i class="fas fa-database"></i>
+            <span id="cachedDataMessage">أنت تشاهد نسخة مخزنة مؤقتاً</span>
+            <span id="lastUpdateTime" class="last-update"></span>
+            <button id="retryFetchBtn" class="retry-fetch-btn">تحديث</button>
+            <button id="closeBannerBtn" class="close-banner-btn">&times;</button>
+        </div>
     </div>
 
     <!-- شريط تقدم تحميل الصور -->
@@ -64,7 +79,7 @@
         <div id="productsContent" style="display: none;"></div>
     </div>
 
-    <!-- فوتر السلة (يبقى كما هو) -->
+    <!-- فوتر السلة -->
     <div class="footer-cart" id="footer-cart">
         <div>
             <div style="font-size: 12px; opacity: 0.8;">الإجمالي النهائي:</div>
@@ -73,11 +88,42 @@
         <button id="whatsappBtn" class="whatsapp-send">إتمام الطلب <i class="fab fa-whatsapp"></i></button>
     </div>
 
-    <!-- صفحة عدم الاتصال -->
+    <!-- نافذة الإعدادات المنبثقة (مسح الكاش) -->
+    <div id="settingsModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">الإعدادات</span>
+                <button class="modal-close" id="closeSettingsBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <button id="clearCacheBtn" class="clear-cache-btn"><i class="fas fa-trash-alt"></i> مسح الكاش (الصور والبيانات المخزنة)</button>
+                <p class="cache-info">سيتم حذف جميع الصور المخزنة مؤقتاً، وسيتم إعادة تحميل البيانات من الخادم عند توفر الاتصال.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة السلة (عرض العناصر وحذفها) -->
+    <div id="cartModal" class="modal" style="display: none;">
+        <div class="modal-content cart-modal-content">
+            <div class="modal-header">
+                <span class="modal-title">سلة المشتريات</span>
+                <button class="modal-close" id="closeCartBtn">&times;</button>
+            </div>
+            <div class="modal-body" id="cartItemsList">
+                <div class="empty-cart-msg">السلة فارغة</div>
+            </div>
+            <div class="cart-modal-footer">
+                <div class="cart-total-display">المجموع: <span id="cartModalTotal">0</span> ل.س</div>
+                <button id="cartModalWhatsappBtn" class="whatsapp-send">إتمام الطلب <i class="fab fa-whatsapp"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- صفحة عدم الاتصال (تظهر فقط عند عدم وجود بيانات وعدم اتصال) -->
     <div id="offlinePage" class="offline-page" style="display: none;">
         <i class="fas fa-wifi-slash"></i>
         <h2>أنت غير متصل بالإنترنت</h2>
-        <p>يرجى التحقق من اتصالك ثم إعادة المحاولة.</p>
+        <p>لا توجد بيانات مخزنة مسبقاً. يرجى التحقق من اتصالك ثم إعادة المحاولة.</p>
         <button id="retryConnectionBtn">إعادة المحاولة</button>
     </div>
 
