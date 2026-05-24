@@ -2,7 +2,61 @@
 const TARGET_NUMBER = "963945083365";
 const API_URL = "https://script.google.com/macros/s/AKfycbz8CnO-_aiuboqy7R4kXFA-FQ4uNaLAVc5-_aC-z6txmg2W33wG7c4Igj_NJeKGF-fk/exec";
 
-// ==================== خدمة التخزين المحلي (IndexedDB) ====================
+// ==================== إدارة الصوت ====================
+class SoundManager {
+    constructor() {
+        this.soundEnabled = false;
+        this.init();
+    }
+    init() {
+        this.clickSound = null;
+        this.levelUpSound = null;
+        this.orderSound = null;
+        this.initSounds();
+        const saved = localStorage.getItem('soundEnabled');
+        if (saved === 'true') this.soundEnabled = true;
+        this.updateIcon();
+    }
+    initSounds() {
+        try {
+            this.clickSound = () => this.playBeep(440, 0.1);
+            this.levelUpSound = () => this.playBeep(880, 0.3, 600);
+            this.orderSound = () => this.playBeep(660, 0.4, 800);
+        } catch(e) { console.warn("Audio not supported"); }
+    }
+    playBeep(frequency, duration, delay = 0) {
+        if (!this.soundEnabled) return;
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const ctx = new AudioContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = frequency;
+            gain.gain.value = 0.1;
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + duration);
+            osc.stop(ctx.currentTime + duration);
+            setTimeout(() => ctx.close(), duration * 1000 + 500);
+        } catch(e) {}
+    }
+    playClick() { if(this.clickSound) this.clickSound(); }
+    playLevelUp() { if(this.levelUpSound) this.levelUpSound(); }
+    playOrder() { if(this.orderSound) this.orderSound(); }
+    toggle() {
+        this.soundEnabled = !this.soundEnabled;
+        localStorage.setItem('soundEnabled', this.soundEnabled);
+        this.updateIcon();
+        return this.soundEnabled;
+    }
+    updateIcon() {
+        const icon = document.getElementById('soundIcon');
+        if (icon) icon.className = this.soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute';
+    }
+}
+
+// ==================== خدمة التخزين (IndexedDB) ====================
 const DB_NAME = "RogvenImageCache";
 const IMAGE_STORE = "images";
 const API_CACHE_STORE = "apiCache";
@@ -64,15 +118,12 @@ class StorageService {
     }
 }
 
-// ==================== مكون الصورة ====================
+// ==================== تحميل الصور ====================
 class LazyImage {
     static async render(imgElement, url, storage) {
         if (!url) return;
         const cached = await storage.getImage(url);
-        if (cached) {
-            imgElement.src = cached;
-            return;
-        }
+        if (cached) { imgElement.src = cached; return; }
         try {
             const response = await fetch(url);
             const blob = await response.blob();
@@ -83,18 +134,17 @@ class LazyImage {
                 imgElement.src = base64;
             };
             reader.readAsDataURL(blob);
-        } catch (err) {
-            imgElement.src = url;
-        }
+        } catch (err) { imgElement.src = url; }
     }
 }
 
-// ==================== مكون المنتج ====================
+// ==================== بطاقة المنتج ====================
 class ProductCard {
-    constructor(product, storage, onUpdateTotal) {
+    constructor(product, storage, onUpdateTotal, soundManager) {
         this.product = product;
         this.storage = storage;
         this.onUpdateTotal = onUpdateTotal;
+        this.sound = soundManager;
         this.quantity = 0;
         this.element = null;
         this.qtyInput = null;
@@ -125,8 +175,10 @@ class ProductCard {
         this.qtyInput = cardDiv.querySelector('.qty-input');
         this.subtotalSpan = cardDiv.querySelector('.subtotal-val');
         this.subtotalRow = cardDiv.querySelector('.item-subtotal');
-        cardDiv.querySelector('.inc-qty').addEventListener('click', () => this.updateQuantity(1));
-        cardDiv.querySelector('.dec-qty').addEventListener('click', () => this.updateQuantity(-1));
+        const incBtn = cardDiv.querySelector('.inc-qty');
+        const decBtn = cardDiv.querySelector('.dec-qty');
+        incBtn.addEventListener('click', () => { this.sound.playClick(); this.updateQuantity(1); });
+        decBtn.addEventListener('click', () => { this.sound.playClick(); this.updateQuantity(-1); });
         const imgEl = cardDiv.querySelector(`#${uniqueId}`);
         LazyImage.render(imgEl, this.product.imageUrl, this.storage);
         return cardDiv;
@@ -144,6 +196,8 @@ class ProductCard {
             } else {
                 this.subtotalRow.style.display = 'none';
             }
+            this.element.classList.add('added');
+            setTimeout(() => this.element.classList.remove('added'), 300);
             if (this.onUpdateTotal) {
                 this.onUpdateTotal(delta > 0 ? this.product.name : null);
             }
@@ -163,12 +217,13 @@ class ProductCard {
     }
 }
 
-// ==================== مكون قائمة المنتجات ====================
+// ==================== شبكة المنتجات ====================
 class ProductsGrid {
-    constructor(containerId, storage, onTotalUpdate) {
+    constructor(containerId, storage, onTotalUpdate, soundManager) {
         this.container = document.getElementById(containerId);
         this.storage = storage;
         this.onTotalUpdate = onTotalUpdate;
+        this.sound = soundManager;
         this.cards = [];
         this.currentView = 'hero';
     }
@@ -178,7 +233,7 @@ class ProductsGrid {
         this.container.insertAdjacentHTML('beforeend', sectionHtml);
         const sectionEl = document.getElementById(sectionId);
         products.forEach(product => {
-            const card = new ProductCard(product, this.storage, (productName) => this.onTotalUpdate(productName));
+            const card = new ProductCard(product, this.storage, (productName) => this.onTotalUpdate(productName), this.sound);
             const cardElement = card.render();
             sectionEl.appendChild(cardElement);
             this.cards.push({ category, card, sectionElement: sectionEl });
@@ -219,7 +274,7 @@ class ProductsGrid {
     }
 }
 
-// ==================== مكون الفوتر ====================
+// ==================== فوتر السلة ====================
 class CartFooter {
     constructor(footerId, totalSpanId, onSendWhatsApp) {
         this.footer = document.getElementById(footerId);
@@ -242,21 +297,24 @@ class CartFooter {
     }
 }
 
-// ==================== مكون الرأس ====================
+// ==================== رأس التطبيق ====================
 class AppHeader {
-    constructor(themeBtnId, viewBtnId, searchInputId, onThemeToggle, onViewToggle, onSearch) {
+    constructor(themeBtnId, viewBtnId, searchInputId, soundBtnId, onThemeToggle, onViewToggle, onSearch, onSoundToggle) {
         this.themeBtn = document.getElementById(themeBtnId);
         this.viewBtn = document.getElementById(viewBtnId);
         this.searchInput = document.getElementById(searchInputId);
+        this.soundBtn = document.getElementById(soundBtnId);
         this.onThemeToggle = onThemeToggle;
         this.onViewToggle = onViewToggle;
         this.onSearch = onSearch;
+        this.onSoundToggle = onSoundToggle;
         this.init();
     }
     init() {
         if (this.themeBtn) this.themeBtn.addEventListener('click', () => this.onThemeToggle());
         if (this.viewBtn) this.viewBtn.addEventListener('click', () => this.onViewToggle());
         if (this.searchInput) this.searchInput.addEventListener('input', (e) => this.onSearch(e.target.value));
+        if (this.soundBtn) this.soundBtn.addEventListener('click', () => this.onSoundToggle());
     }
     setViewIcon(isList) {
         if (!this.viewBtn) return;
@@ -268,7 +326,7 @@ class AppHeader {
     }
 }
 
-// ==================== مكون التصنيفات ====================
+// ==================== أزرار التصنيفات ====================
 class CategoryChips {
     constructor(containerId, onSelectCategory) {
         this.container = document.getElementById(containerId);
@@ -294,15 +352,12 @@ class CategoryChips {
         chipElement.classList.add('active');
         this.onSelectCategory(catName);
     }
-    resetToAll() {
-        const allChip = this.container ? this.container.querySelector('.chip[data-category="all"]') : null;
-        if (allChip) this.selectCategory('all', allChip);
-    }
 }
 
-// ==================== نظام اللعب ====================
+// ==================== نظام اللعب (Gamification) ====================
 class Gamification {
-    constructor() {
+    constructor(soundManager) {
+        this.sound = soundManager;
         this.xp = 0;
         this.level = 1;
         this.badges = [];
@@ -340,6 +395,7 @@ class Gamification {
         }
         if (newLevel > this.level) {
             this.level = newLevel;
+            this.sound.playLevelUp();
             this.showToast(`🎉 رفعت لمستوى ${this.level} ! 🎉`, '', 2000);
         }
     }
@@ -405,8 +461,9 @@ class Gamification {
 // ==================== التطبيق الرئيسي ====================
 class App {
     constructor() {
+        this.soundManager = new SoundManager();
         this.storage = new StorageService();
-        this.game = new Gamification();
+        this.game = new Gamification(this.soundManager);
         this.productsGrid = null;
         this.cartFooter = null;
         this.header = null;
@@ -420,16 +477,16 @@ class App {
         await this.storage.init();
         this.productsGrid = new ProductsGrid('main-container', this.storage, (productName) => {
             this.updateTotal(productName);
-        });
+        }, this.soundManager);
         this.cartFooter = new CartFooter('footer-cart', 'grand-total', () => this.sendWhatsApp());
         this.header = new AppHeader(
-            'themeToggleBtn', 'viewToggleBtn', 'search-input',
+            'themeToggleBtn', 'viewToggleBtn', 'search-input', 'soundToggleBtn',
             () => this.toggleTheme(),
             () => this.toggleView(),
-            (query) => this.productsGrid.filterBySearch(query)
+            (query) => this.productsGrid.filterBySearch(query),
+            () => this.toggleSound()
         );
         this.categoryChips = new CategoryChips('category-chips', (cat) => this.onCategorySelected(cat));
-
         const cachedData = await this.storage.getApiCache();
         if (cachedData) this.renderFullData(cachedData);
         this.fetchFreshData();
@@ -494,6 +551,7 @@ class App {
     sendWhatsApp() {
         const items = this.productsGrid.getAllCartItems();
         if (items.length === 0) return;
+        this.soundManager.playOrder();
         let message = "";
         for (const item of items) {
             const sub = item.quantity * item.price;
@@ -511,8 +569,6 @@ class App {
         body.setAttribute('data-theme', isDark ? 'light' : 'dark');
         const icon = document.getElementById('theme-icon');
         if (icon) icon.className = isDark ? 'fas fa-moon' : 'fas fa-sun';
-        
-        // تبديل الخلفية المتحركة
         const dayElements = document.querySelector('.day-elements');
         const nightElements = document.querySelector('.night-elements');
         if (dayElements && nightElements) {
@@ -531,6 +587,10 @@ class App {
         this.header.setViewIcon(!isListView);
         const searchVal = document.getElementById('search-input');
         if (searchVal) this.productsGrid.filterBySearch(searchVal.value);
+    }
+    toggleSound() {
+        const enabled = this.soundManager.toggle();
+        console.log("الصوت", enabled ? "مفعل" : "معطل");
     }
 }
 
