@@ -32,10 +32,10 @@
     <!-- رأس التطبيق -->
     <div class="header">
         <button class="icon-btn" id="soundToggleBtn" title="تفعيل الصوت"><i id="soundIcon" class="fas fa-volume-mute"></i></button>
-        <button class="icon-btn" id="musicToggleBtn" title="موسيقى الخلفية"><i id="musicIcon" class="fas fa-music"></i></button>
+        <button class="icon-btn" id="musicToggleBtn" title="موسيقى الخلفية"><i id="musicIcon" class="fas fa-music-slash"></i></button>
         <button class="icon-btn" id="profileBtn" title="ملفي الشخصي"><i class="fas fa-user-astronaut"></i></button>
+        <button class="icon-btn" id="settingsBtn" title="الإعدادات"><i class="fas fa-cog"></i></button>
         <button class="icon-btn" id="themeToggleBtn"><i id="theme-icon" class="fas fa-moon"></i></button>
-        <button class="icon-btn" id="viewToggleBtn"><i id="view-icon" class="fas fa-list"></i></button>
         <div class="cart-icon-wrapper">
             <button class="icon-btn" id="cartIconBtn" title="عربة التسوق">
                 <i class="fas fa-shopping-cart"></i>
@@ -80,7 +80,7 @@
         <button id="whatsappBtn" class="whatsapp-send">إتمام الطلب <i class="fab fa-whatsapp"></i></button>
     </div>
 
-    <!-- مودال (نافذة منبثقة) البروفايل -->
+    <!-- مودال البروفايل -->
     <div id="profileModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -103,6 +103,30 @@
                 <div class="profile-badges">
                     <h3>الشارات</h3>
                     <div id="profileBadgesList" class="badges-list">لا توجد شارات بعد</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- مودال الإعدادات -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="settings-close">&times;</span>
+                <h2><i class="fas fa-cog"></i> الإعدادات</h2>
+            </div>
+            <div class="modal-body">
+                <div class="setting-item">
+                    <label>🔊 المؤثرات الصوتية</label>
+                    <button id="settingsSoundBtn" class="settings-btn">تفعيل</button>
+                </div>
+                <div class="setting-item">
+                    <label>🎵 الموسيقى الخلفية</label>
+                    <button id="settingsMusicBtn" class="settings-btn">تفعيل</button>
+                </div>
+                <div class="setting-item">
+                    <label>📱 طريقة العرض</label>
+                    <button id="settingsViewBtn" class="settings-btn">وضع القائمة</button>
                 </div>
             </div>
         </div>
