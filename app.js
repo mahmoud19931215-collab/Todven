@@ -1,7 +1,7 @@
 // ==================== ثوابت عامة ====================
 const TARGET_NUMBER = "963945083365";
 const API_URL = "https://script.google.com/macros/s/AKfycbz8CnO-_aiuboqy7R4kXFA-FQ4uNaLAVc5-_aC-z6txmg2W33wG7c4Igj_NJeKGF-fk/exec";
-const ITEMS_PER_PAGE = 20; // عدد المنتجات الأولية لكل تصنيف
+const ITEMS_PER_PAGE = 20;
 
 // ==================== خدمة التخزين (Dexie) ====================
 class StorageService {
@@ -197,21 +197,19 @@ class ProductsGrid {
         this.originalContainer = document.getElementById(containerId);
         this.storage = storage;
         this.onTotalUpdate = onTotalUpdate;
-        this.cards = []; // { category, card, sectionElement, productData }
+        this.cards = [];
         this.savedCart = savedCart;
         this.imagesLoaded = 0;
         this.totalImages = 0;
         this.onImageProgress = null;
-        // حاوية المحتوى الفعلية
         this.container = document.getElementById('productsContent');
         if (!this.container) {
             console.error("productsContent not found");
             this.container = this.originalContainer;
         }
-        // تخزين قوائم المنتجات الكاملة لكل تصنيف
-        this.fullProductsMap = new Map(); // category -> array of product objects
-        this.currentPageMap = new Map(); // category -> current page index (0-based)
-        this.loadMoreButtons = new Map(); // category -> button element
+        this.fullProductsMap = new Map();
+        this.currentPageMap = new Map();
+        this.loadMoreButtons = new Map();
     }
     setImageProgressCallback(callback) {
         this.onImageProgress = callback;
@@ -223,12 +221,9 @@ class ProductsGrid {
             this.onImageProgress(percent);
         }
     }
-    // إضافة تصنيف وعرض أول دفعة من المنتجات
     renderCategory(category, products) {
-        // تخزين جميع المنتجات لهذا التصنيف
         this.fullProductsMap.set(category, products);
         this.currentPageMap.set(category, 0);
-        // إنشاء قسم التصنيف إذا لم يكن موجوداً
         const sectionId = `section-${category}`;
         let sectionEl = document.getElementById(sectionId);
         if (!sectionEl) {
@@ -238,10 +233,8 @@ class ProductsGrid {
         }
         const gridInner = document.getElementById(`grid-${category}`);
         if (!gridInner) return;
-        // عرض أول دفعة
-        this.loadMoreForCategory(category, true); // true = reset existing
+        this.loadMoreForCategory(category, true);
     }
-    // تحميل دفعة إضافية لتصنيف معين
     loadMoreForCategory(category, reset = false) {
         const products = this.fullProductsMap.get(category);
         if (!products) return;
@@ -250,7 +243,6 @@ class ProductsGrid {
         const end = start + ITEMS_PER_PAGE;
         const newProducts = products.slice(start, end);
         if (newProducts.length === 0) {
-            // إخفاء زر "عرض المزيد" إذا لم يعد هناك منتجات
             const btn = this.loadMoreButtons.get(category);
             if (btn) btn.style.display = 'none';
             return;
@@ -258,12 +250,10 @@ class ProductsGrid {
         const gridInner = document.getElementById(`grid-${category}`);
         if (!gridInner) return;
         if (reset) {
-            // مسح المحتوى القديم وإعادة تعيين العداد
             gridInner.innerHTML = '';
             this.cards = this.cards.filter(c => c.category !== category);
             this.currentPageMap.set(category, 0);
         }
-        // إنشاء البطاقات الجديدة
         newProducts.forEach(product => {
             const savedQty = this.savedCart[product.name] || 0;
             const card = new ProductCard(product, this.storage, (name, first) => this.onTotalUpdate(name, first), savedQty, () => this.imageLoaded());
@@ -272,10 +262,8 @@ class ProductsGrid {
             this.cards.push({ category, card, sectionElement: gridInner, productData: product });
             this.totalImages++;
         });
-        // تحديث رقم الصفحة
         const newPage = reset ? 1 : currentPage + 1;
         this.currentPageMap.set(category, newPage);
-        // إدارة زر "عرض المزيد"
         let loadBtn = this.loadMoreButtons.get(category);
         const hasMore = end < products.length;
         if (!loadBtn && hasMore) {
@@ -286,11 +274,7 @@ class ProductsGrid {
             gridInner.insertAdjacentElement('afterend', loadBtn);
             this.loadMoreButtons.set(category, loadBtn);
         } else if (loadBtn) {
-            if (hasMore) {
-                loadBtn.style.display = 'block';
-            } else {
-                loadBtn.style.display = 'none';
-            }
+            loadBtn.style.display = hasMore ? 'block' : 'none';
         }
     }
     clear() {
@@ -305,14 +289,12 @@ class ProductsGrid {
     filterBySearch(query) {
         const lowerQuery = query.toLowerCase();
         let visibleCount = 0;
-        // إظهار/إخفاء البطاقات بناءً على الاسم
         this.cards.forEach(({ card }) => {
             const name = card.getName().toLowerCase();
             const matches = name.includes(lowerQuery);
             card.element.style.display = matches ? 'block' : 'none';
             if (matches) visibleCount++;
         });
-        // إخفاء أزرار "عرض المزيد" أثناء البحث (حتى لا تسبب ارتباكاً)
         this.loadMoreButtons.forEach((btn, category) => {
             if (lowerQuery !== '') {
                 btn.style.display = 'none';
@@ -384,16 +366,14 @@ class CartFooter {
     }
 }
 
-// ==================== رأس التطبيق (بدون أزرار إضافية) ====================
+// ==================== رأس التطبيق (بدون أيقونة سلة) ====================
 class AppHeader {
-    constructor(themeBtnId, searchInputId, clearSearchBtnId, onThemeToggle, onSearch, onCartClick) {
+    constructor(themeBtnId, searchInputId, clearSearchBtnId, onThemeToggle, onSearch) {
         this.themeBtn = document.getElementById(themeBtnId);
         this.searchInput = document.getElementById(searchInputId);
         this.clearSearchBtn = document.getElementById(clearSearchBtnId);
-        this.cartBtn = document.getElementById('cartIconBtn');
         this.onThemeToggle = onThemeToggle;
         this.onSearch = onSearch;
-        this.onCartClick = onCartClick;
         this.init();
     }
     init() {
@@ -401,14 +381,6 @@ class AppHeader {
         if (this.searchInput) this.searchInput.addEventListener('input', (e) => this.onSearch(e.target.value));
         if (this.clearSearchBtn) this.clearSearchBtn.addEventListener('click', () => { this.searchInput.value = ''; this.onSearch(''); this.clearSearchBtn.style.display = 'none'; });
         if (this.searchInput) this.searchInput.addEventListener('input', () => { if(this.clearSearchBtn) this.clearSearchBtn.style.display = this.searchInput.value ? 'flex' : 'none'; });
-        if (this.cartBtn) this.cartBtn.addEventListener('click', () => this.onCartClick());
-    }
-    updateCartCount(count) {
-        const counter = document.getElementById('cartCount');
-        if (counter) {
-            counter.innerText = count;
-            counter.style.display = count > 0 ? 'flex' : 'none';
-        }
     }
 }
 
@@ -461,12 +433,10 @@ class App {
         this.header = new AppHeader(
             'themeToggleBtn', 'search-input', 'clearSearchBtn',
             () => this.toggleTheme(),
-            (query) => this.productsGrid.filterBySearch(query),
-            () => this.scrollToCart()
+            (query) => this.productsGrid.filterBySearch(query)
         );
         this.categoryChips = new CategoryChips('category-chips', (cat) => this.onCategorySelected(cat));
 
-        // شريط تقدم الصور
         const progressBar = document.getElementById('imageProgressBar');
         const progressFill = document.querySelector('.image-progress-fill');
         if (progressBar && progressFill) {
@@ -480,7 +450,6 @@ class App {
             });
         }
 
-        // إظهار skeleton أولاً
         const skeleton = document.getElementById('skeletonContainer');
         const productsContent = document.getElementById('productsContent');
         if (skeleton) skeleton.style.display = 'grid';
@@ -537,7 +506,6 @@ class App {
     renderFullData(data) {
         this.fullData = data;
         this.productsGrid.clear();
-        // إخفاء skeleton وإظهار المحتوى
         const skeleton = document.getElementById('skeletonContainer');
         const productsContent = document.getElementById('productsContent');
         if (skeleton) skeleton.style.display = 'none';
@@ -574,7 +542,6 @@ class App {
             totalQty += item.quantity;
         }
         this.cartFooter.updateTotal(total);
-        if (this.header) this.header.updateCartCount(totalQty);
         this.lastTotalQty = totalQty;
         this.saveCart();
     }
@@ -618,7 +585,7 @@ class App {
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => new App());
 else new App();
 
-// تسجيل Service Worker (مع تجاهل أخطاء الأيقونات)
+// تسجيل Service Worker
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
