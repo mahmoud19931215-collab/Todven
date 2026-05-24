@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>غير متصل - Togven</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            direction: rtl;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .offline-container {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 40px;
+            padding: 40px 20px;
+            max-width: 300px;
+        }
+        i {
+            font-size: 80px;
+            margin-bottom: 20px;
+            color: #f1c40f;
+        }
+        button {
+            background: #2ecc71;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 40px;
+            color: white;
+            font-size: 16px;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <div class="offline-container">
+        <i class="fas fa-wifi-slash"></i>
+        <h2>أنت غير متصل</h2>
+        <p>يرجى التحقق من اتصالك بالإنترنت.</p>
+        <button onclick="location.reload()">إعادة المحاولة</button>
+    </div>
+</body>
+</html>
