@@ -351,11 +351,13 @@ body {
 }
 .product-img {
     width: 100%;
-    aspect-ratio: 1 / 1;
+    height: auto;                 /* يحافظ على النسبة الأصلية */
+    aspect-ratio: auto;          /* يلغي القوة السابقة للـ aspect-ratio */
     object-fit: contain;
     background: rgba(255,255,255,0.5);
     padding: 12px;
     transition: transform 0.3s;
+    max-height: 300px;           /* اختياري: حد أقصى للارتفاع */
 }
 .product-card:hover .product-img {
     transform: scale(1.02);
