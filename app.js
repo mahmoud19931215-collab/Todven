@@ -1,6 +1,6 @@
 // ==================== ثوابت عامة ====================
 const TARGET_NUMBER = "963945083365";
-const API_URL = "https://script.google.com/macros/s/AKfycbz8CnO-_aiuboqy7R4kXFA-FQ4uNaLAVc5-_aC-z6txmg2W33wG7c4Igj_NJeKGF-fk/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwrXoE1tAYJb6D19UM9M-FSUDE9AMd73cj0u35bL7tyG902QN0B6nuDFisNQfgEwELq/exec";
 const ITEMS_PER_PAGE = 12;
 
 // ==================== خدمة التخزين (Dexie) مع دعم Blob ====================
