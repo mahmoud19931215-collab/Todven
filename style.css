@@ -353,14 +353,14 @@ body {
     transform: translateY(-6px);
     box-shadow: var(--shadow-md);
 }
-/* الصورة: تأخذ عرض الكرت بالكامل، ارتفاع تلقائي، زوايا دائرية من الأعلى مثل الكرة */
+/* الصورة: تأخذ عرض الكرت بالكامل، ارتفاع تلقائي، بدون padding، زوايا دائرية من الأعلى فقط */
 .product-img {
     width: 100%;
     height: auto;
     display: block;
     object-fit: contain;
     background: rgba(255,255,255,0.5);
-    padding: 12px;
+    padding: 0;                    /* إزالة أي padding */
     transition: transform 0.3s;
     border-radius: 28px 28px 0 0; /* زوايا عليا دائرية مثل الكرت */
 }
