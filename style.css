@@ -346,20 +346,23 @@ body {
     border: var(--glass-border);
     transition: var(--transition);
     cursor: pointer;
+    display: flex;
+    flex-direction: column;
 }
 .product-card:hover {
     transform: translateY(-6px);
     box-shadow: var(--shadow-md);
 }
+/* الصورة: تأخذ عرض الكرت بالكامل، ارتفاع تلقائي، زوايا دائرية من الأعلى مثل الكرة */
 .product-img {
     width: 100%;
     height: auto;
-    aspect-ratio: auto;
+    display: block;
     object-fit: contain;
     background: rgba(255,255,255,0.5);
     padding: 12px;
     transition: transform 0.3s;
-    max-height: 300px;
+    border-radius: 28px 28px 0 0; /* زوايا عليا دائرية مثل الكرت */
 }
 .product-card:hover .product-img {
     transform: scale(1.02);
@@ -367,6 +370,9 @@ body {
 .product-info {
     padding: 16px;
     text-align: center;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 .product-name {
     font-size: 18px;
