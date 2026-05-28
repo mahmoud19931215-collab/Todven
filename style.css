@@ -353,16 +353,16 @@ body {
     transform: translateY(-6px);
     box-shadow: var(--shadow-md);
 }
-/* الصورة: تأخذ عرض الكرت بالكامل، ارتفاع تلقائي، بدون padding، زوايا دائرية من الأعلى فقط */
+/* الصورة: تأخذ عرض الكرت بالكامل بدون أي padding أو حدود */
 .product-img {
-    width: 100%;
-    height: auto;
-    display: block;
-    object-fit: contain;
+    width: 100%;          /* العرض الكامل للكرت */
+    display: block;       /* يزيل أي فراغ سفلي */
+    object-fit: cover;    /* تغطي المساحة كاملة بدون تشويه (أو استخدم contain إذا أردت رؤية الصورة كاملة) */
     background: rgba(255,255,255,0.5);
-    padding: 0;                    /* إزالة أي padding */
+    padding: 0;
+    margin: 0;
     transition: transform 0.3s;
-    border-radius: 28px 28px 0 0; /* زوايا عليا دائرية مثل الكرت */
+    border-radius: 28px 28px 0 0;
 }
 .product-card:hover .product-img {
     transform: scale(1.02);
