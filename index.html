@@ -1,128 +1,147 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#2ecc71">
+    <title>توجفن | متجرك الذكي</title>
+    
+    <!-- الخطوط والأيقونات -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <!-- مكتبات خارجية -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/promise-polyfill@8/dist/polyfill.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/whatwg-fetch@3.6.2/dist/fetch.umd.js"></script>
+    
+    <!-- ملف الأنماط الرئيسي -->
     <link rel="stylesheet" href="style.css">
+    
+    <!-- ملف البيان لتطبيق الويب -->
     <link rel="manifest" href="manifest.json">
-    <title>Togven - متجرك الحديث</title>
 </head>
 <body>
-
-    <!-- الخلفية المتحركة -->
-    <div class="background-animation">
-        <div class="day-elements">
+    <!-- خلفية ديناميكية (شمس/قمر/غيوم) -->
+    <div class="animated-bg">
+        <div class="day-scene">
             <div class="sun"></div>
-            <div class="cloud cloud1"></div>
-            <div class="cloud cloud2"></div>
-            <div class="cloud cloud3"></div>
-            <div class="cloud cloud4"></div>
+            <div class="cloud c1"></div>
+            <div class="cloud c2"></div>
+            <div class="cloud c3"></div>
         </div>
-        <div class="night-elements" style="display: none;">
+        <div class="night-scene" style="display: none;">
             <div class="moon"></div>
-            <div class="star star1"></div>
-            <div class="star star2"></div>
-            <div class="star star3"></div>
-            <div class="star star4"></div>
-            <div class="star star5"></div>
-            <div class="star star6"></div>
+            <div class="stars">
+                <div class="star"></div><div class="star"></div><div class="star"></div>
+                <div class="star"></div><div class="star"></div><div class="star"></div>
+            </div>
         </div>
     </div>
 
-    <!-- رأس التطبيق -->
-    <div class="header">
+    <!-- شريط التحميل العلوي للصور -->
+    <div id="globalProgress" class="global-progress" style="display: none;">
+        <div class="progress-fill"></div>
+    </div>
+
+    <!-- بانر وضع عدم الاتصال -->
+    <div id="offlineToast" class="offline-toast" style="display: none;">
+        <i class="fas fa-database"></i>
+        <span>نسخة مخزنة مؤقتاً</span>
+        <span id="cacheTime"></span>
+        <button id="refreshDataBtn">تحديث</button>
+        <button id="closeToastBtn">&times;</button>
+    </div>
+
+    <!-- رأس التطبيق مع شريط البحث وأزرار الإجراءات -->
+    <header class="app-header">
         <div class="header-actions">
-            <button class="icon-btn" id="themeToggleBtn"><i id="theme-icon" class="fas fa-moon"></i></button>
-            <button class="icon-btn" id="cartIconBtn" style="display: none;"><i class="fas fa-shopping-cart"></i><span id="cartCountBadge" class="cart-count">0</span></button>
-            <button class="icon-btn" id="settingsBtn"><i class="fas fa-cog"></i></button>
+            <button id="themeToggle" class="icon-btn" aria-label="الوضع الليلي">
+                <i class="fas fa-moon"></i>
+            </button>
+            <button id="cartDrawerBtn" class="icon-btn cart-icon" aria-label="السلة">
+                <i class="fas fa-shopping-cart"></i>
+                <span id="cartBadge" class="badge">0</span>
+            </button>
+            <button id="settingsBtn" class="icon-btn" aria-label="الإعدادات">
+                <i class="fas fa-cog"></i>
+            </button>
         </div>
-        <div class="search-wrapper">
-            <input type="text" id="search-input" placeholder="ابحث عما تريد...">
-            <button id="clearSearchBtn" class="clear-search-btn" style="display: none;">✖</button>
+        <div class="search-container">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" id="searchInput" placeholder="ابحث عن منتج..." autocomplete="off">
+            <button id="clearSearch" class="clear-search" style="display: none;">✖</button>
         </div>
-        <div id="searchResultCount" class="search-result-count"></div>
-    </div>
+        <div id="searchStats" class="search-stats"></div>
+    </header>
 
-    <!-- أزرار التصنيفات الرئيسية -->
-    <div class="chips-wrapper" id="main-category-chips">
-        <div class="chip active" data-category="all">الكل</div>
+    <!-- أزرار التصنيفات الرئيسية (جينيريك) -->
+    <div class="chips-horizontal" id="mainChipsContainer">
+        <div class="chip active" data-cat="all">الكل</div>
     </div>
 
     <!-- أزرار التصنيفات الفرعية (تظهر عند اختيار تصنيف رئيسي) -->
-    <div class="chips-wrapper subcategory-chips" id="subcategory-chips" style="display: none;">
-        <!-- ستضاف ديناميكياً -->
+    <div class="chips-horizontal sub-chips" id="subChipsContainer" style="display: none;"></div>
+
+    <!-- حاوية المنتجات الرئيسية -->
+    <main class="main-container" id="mainContainer">
+        <div id="skeletonLoader" class="skeleton-grid">
+            <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
+            <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
+            <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
+        </div>
+        <div id="productsGrid" class="products-grid" style="display: none;"></div>
+    </main>
+
+    <!-- فوتر السلة العائم -->
+    <div id="cartFooter" class="cart-floating-footer">
+        <div class="total-info">
+            <span class="total-label">الإجمالي</span>
+            <span id="grandTotal" class="total-value">0</span>
+            <span class="currency">ل.س</span>
+        </div>
+        <button id="whatsappFooterBtn" class="whatsapp-btn">
+            <i class="fab fa-whatsapp"></i> إتمام الطلب
+        </button>
     </div>
 
-    <!-- رسالة الوضع غير المتصل -->
-    <div id="offlineBanner" class="offline-banner" style="display: none;">
-        <div class="offline-banner-content">
-            <i class="fas fa-database"></i>
-            <span>أنت تشاهد نسخة مخزنة مؤقتاً</span>
-            <span id="lastUpdateTime" class="last-update"></span>
-            <button id="retryFetchBtn" class="retry-fetch-btn">تحديث</button>
-            <button id="closeBannerBtn" class="close-banner-btn">&times;</button>
+    <!-- مودال السلة الجانبي (Drawer) -->
+    <div id="cartDrawer" class="drawer">
+        <div class="drawer-header">
+            <h3><i class="fas fa-shopping-cart"></i> سلة المشتريات</h3>
+            <button class="drawer-close">&times;</button>
+        </div>
+        <div id="cartItemsList" class="drawer-body">
+            <div class="empty-cart">سلة فارغة</div>
+        </div>
+        <div class="drawer-footer">
+            <div class="drawer-total">المجموع: <span id="drawerTotal">0</span> ل.س</div>
+            <button id="drawerWhatsappBtn" class="whatsapp-btn">إرسال الطلب <i class="fab fa-whatsapp"></i></button>
         </div>
     </div>
-
-    <!-- شريط تقدم الصور -->
-    <div id="imageProgressBar" class="image-progress-bar" style="display: none;">
-        <div class="image-progress-fill" style="width:0%"></div>
-    </div>
-
-    <!-- حاوية المنتجات -->
-    <div class="container product-container hero-view" id="main-container">
-        <div class="skeleton-container" id="skeletonContainer">
-            <div class="skeleton-card"><div class="skeleton-image"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
-            <div class="skeleton-card"><div class="skeleton-image"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
-            <div class="skeleton-card"><div class="skeleton-image"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
-        </div>
-        <div id="productsContent" style="display: none;"></div>
-    </div>
-
-    <!-- فوتر السلة -->
-    <div class="footer-cart" id="footer-cart">
-        <div>
-            <div style="font-size: 12px; opacity: 0.8;">الإجمالي النهائي:</div>
-            <div style="font-size: 18px; font-weight: 800;"><span id="grand-total">0</span> ل.س</div>
-        </div>
-        <button id="whatsappBtn" class="whatsapp-send">إتمام الطلب <i class="fab fa-whatsapp"></i></button>
-    </div>
+    <div id="cartOverlay" class="drawer-overlay"></div>
 
     <!-- مودال الإعدادات -->
-    <div id="settingsModal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header"><span class="modal-title">الإعدادات</span><button class="modal-close" id="closeSettingsBtn">&times;</button></div>
+    <div id="settingsModal" class="modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <span>الإعدادات</span>
+                <button class="modal-close">&times;</button>
+            </div>
             <div class="modal-body">
-                <button id="clearCacheBtn" class="clear-cache-btn"><i class="fas fa-trash-alt"></i> مسح الكاش (الصور والبيانات)</button>
-                <p class="cache-info">سيتم حذف جميع الصور المخزنة مؤقتاً وإعادة التحميل من الخادم.</p>
+                <button id="clearCacheAction" class="danger-btn"><i class="fas fa-trash-alt"></i> مسح الكاش (الصور والبيانات)</button>
+                <p class="hint">سيتم حذف جميع الملفات المخزنة مؤقتاً وإعادة تحميلها من الخادم.</p>
             </div>
         </div>
     </div>
 
-    <!-- مودال السلة -->
-    <div id="cartModal" class="modal" style="display: none;">
-        <div class="modal-content cart-modal-content">
-            <div class="modal-header"><span class="modal-title">سلة المشتريات</span><button class="modal-close" id="closeCartBtn">&times;</button></div>
-            <div class="modal-body" id="cartItemsList"><div class="empty-cart-msg">السلة فارغة</div></div>
-            <div class="cart-modal-footer">
-                <div class="cart-total-display">المجموع: <span id="cartModalTotal">0</span> ل.س</div>
-                <button id="cartModalWhatsappBtn" class="whatsapp-send">إتمام الطلب <i class="fab fa-whatsapp"></i></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- صفحة عدم الاتصال -->
-    <div id="offlinePage" class="offline-page" style="display: none;">
+    <!-- صفحة عدم الاتصال الشاملة -->
+    <div id="offlinePage" class="fullscreen-offline" style="display: none;">
         <i class="fas fa-wifi-slash"></i>
-        <h2>أنت غير متصل بالإنترنت</h2>
-        <p>لا توجد بيانات مخزنة مسبقاً. يرجى التحقق من اتصالك ثم إعادة المحاولة.</p>
-        <button id="retryConnectionBtn">إعادة المحاولة</button>
+        <h2>لا يوجد اتصال بالإنترنت</h2>
+        <p>لا توجد بيانات مخزنة مسبقاً. يرجى التحقق من الشبكة.</p>
+        <button id="retryConnection">إعادة المحاولة</button>
     </div>
 
-    <script src="app.js" type="module"></script>
+    <!-- ملف التطبيق الرئيسي (موديول) -->
+    <script type="module" src="app.js"></script>
 </body>
 </html>
