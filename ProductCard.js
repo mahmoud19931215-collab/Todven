@@ -35,9 +35,9 @@ export class ProductCard {
                 <div class="product-price">${this.product.price.toLocaleString()} ل.س</div>
                 ${subtotalDisplay}
                 <div class="qty-controls">
-                    <button class="qty-btn dec-qty">-</button>
-                    <input type="number" class="qty-input" value="${this.quantity}" min="0" max="${this.product.stock || 999}" step="1">
                     <button class="qty-btn inc-qty">+</button>
+                    <input type="number" class="qty-input" value="${this.quantity}" min="0" max="${this.product.stock || 999}" step="1">
+                    <button class="qty-btn dec-qty">-</button>
                 </div>
             </div>
         `;
@@ -48,9 +48,10 @@ export class ProductCard {
         this.subtotalRow = card.querySelector('.item-subtotal');
         this.imageElement = card.querySelector(`#${uniqueId}`);
 
-        // أزرار الكمية
+        // أزرار الكمية (تم تبديل الألوان في CSS)
         const incBtn = card.querySelector('.inc-qty');
         const decBtn = card.querySelector('.dec-qty');
+        
         incBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.changeQuantity(1);
@@ -91,28 +92,56 @@ export class ProductCard {
             return;
         }
 
-        // محاولة الحصول من الكاش
-        const cachedBlob = await this.storage.getImageBlob(imageUrl);
+        // محاولة الحصول من الكاش (IndexedDB أو localStorage)
+        let cachedBlob = null;
+        try {
+            cachedBlob = await this.storage.getImageBlob(imageUrl);
+        } catch (e) {
+            console.warn("Error getting cached blob", e);
+        }
+
         if (cachedBlob) {
             const url = URL.createObjectURL(cachedBlob);
             this.imageElement.src = url;
-            // تحرير URL بعد التحميل (اختياري)
             this.imageElement.onload = () => URL.revokeObjectURL(url);
+            this.imageElement.onerror = () => {
+                URL.revokeObjectURL(url);
+                this.loadImageDirect();
+            };
             return;
         }
 
-        // تحميل من الشبكة
+        // إذا لم يكن في الكاش، نحاول التحميل مباشرة (مع إمكانية التخزين)
+        this.loadImageDirect();
+    }
+
+    async loadImageDirect() {
+        const imageUrl = this.product.imageUrl;
+        if (!imageUrl) {
+            this.setPlaceholderImage();
+            return;
+        }
+
+        // نستخدم fetch أولاً لمحاولة التخزين المؤقت
         try {
-            const res = await fetch(imageUrl);
+            const res = await fetch(imageUrl, { mode: 'cors' });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const blob = await res.blob();
             await this.storage.saveImageBlob(imageUrl, blob);
             const url = URL.createObjectURL(blob);
             this.imageElement.src = url;
             this.imageElement.onload = () => URL.revokeObjectURL(url);
+            this.imageElement.onerror = () => {
+                URL.revokeObjectURL(url);
+                this.setPlaceholderImage();
+            };
         } catch (err) {
-            console.warn(`فشل تحميل الصورة: ${imageUrl}`, err);
-            this.setPlaceholderImage();
+            console.warn(`فشل تحميل الصورة عبر fetch: ${imageUrl}`, err);
+            // محاولة مباشرة باستخدام src (قد تعمل إذا كانت الصورة متاحة وCORS ليست مشكلة)
+            this.imageElement.src = imageUrl;
+            this.imageElement.onerror = () => {
+                this.setPlaceholderImage();
+            };
         }
     }
 
@@ -141,7 +170,6 @@ export class ProductCard {
             if (newVal >= 0 && newVal <= maxStock) {
                 this.quantity = newVal;
                 this.updateUI();
-                // تأثير إضافة
                 this.element.classList.add('added');
                 setTimeout(() => this.element.classList.remove('added'), 300);
                 if (this.onQuantityChange) {
