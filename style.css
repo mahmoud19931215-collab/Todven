@@ -761,3 +761,27 @@ body {
     background: #2c2c3a;
   }
 }
+/* ========== أزرار التصنيفات الفرعية ========== */
+.subcategory-chips {
+    margin-top: -5px;
+    margin-bottom: 10px;
+    background: rgba(0,0,0,0.05);
+    backdrop-filter: blur(8px);
+}
+[data-theme="dark"] .subcategory-chips {
+    background: rgba(255,255,255,0.05);
+}
+.chip.sub-active {
+    background: var(--primary-dark);
+    color: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* تحسين ظهور التصنيفات */
+.category-header {
+    cursor: pointer;
+    transition: 0.2s;
+}
+.category-header:hover {
+    padding-right: 20px;
+}
