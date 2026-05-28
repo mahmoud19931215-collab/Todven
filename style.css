@@ -1,4 +1,4 @@
-/* ==================== ملف الأنماط الرئيسي لتطبيق توجفن ==================== */
+/* ==================== ملف الأنماط الرئيسي لتطوجفن ==================== */
 /* يدعم الوضع الليلي، الخطوط المتجاوبة، التأثيرات الحديثة */
 
 /* ========== الثوابت والمتغيرات ========== */
@@ -7,6 +7,8 @@
     --primary-dark: #27ae60;
     --primary-light: #54d98c;
     --secondary: #3498db;
+    --danger: #e74c3c;
+    --danger-dark: #c0392b;
     --dark-bg: #1a1a2e;
     --light-bg: #f4f9f8;
     --text-dark: #2c3e50;
@@ -351,13 +353,13 @@ body {
 }
 .product-img {
     width: 100%;
-    height: auto;                 /* يحافظ على النسبة الأصلية */
-    aspect-ratio: auto;          /* يلغي القوة السابقة للـ aspect-ratio */
+    height: auto;
+    aspect-ratio: auto;
     object-fit: contain;
     background: rgba(255,255,255,0.5);
     padding: 12px;
     transition: transform 0.3s;
-    max-height: 300px;           /* اختياري: حد أقصى للارتفاع */
+    max-height: 300px;
 }
 .product-card:hover .product-img {
     transform: scale(1.02);
@@ -388,8 +390,9 @@ body {
     gap: 10px;
     margin-top: 8px;
 }
-.qty-btn {
-    background: var(--secondary);
+/* الزر + (زيادة) أخضر */
+.qty-btn.inc-qty {
+    background: var(--primary);
     border: none;
     width: 38px;
     height: 38px;
@@ -400,8 +403,33 @@ body {
     cursor: pointer;
     transition: 0.1s;
 }
-.qty-btn:active {
+.qty-btn.inc-qty:active {
     transform: scale(0.85);
+    background: var(--primary-dark);
+}
+/* الزر - (نقص) أحمر / داكن */
+.qty-btn.dec-qty {
+    background: var(--danger);
+    border: none;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    color: white;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.1s;
+}
+.qty-btn.dec-qty:active {
+    transform: scale(0.85);
+    background: var(--danger-dark);
+}
+/* في الوضع الليلي نضمن الألوان */
+[data-theme="dark"] .qty-btn.inc-qty {
+    background: var(--primary-dark);
+}
+[data-theme="dark"] .qty-btn.dec-qty {
+    background: #c0392b;
 }
 .qty-input {
     width: 50px;
