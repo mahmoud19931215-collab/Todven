@@ -13,14 +13,13 @@ export class ProductsGrid {
         this.activeMain = 'all';
         this.activeSub = null;
         this.searchQuery = '';
-        // الترقيم الداخلي لكل قسم
         this.currentPageMap = new Map();
         this.loadMoreButtons = new Map();
-        // هيكل جديد للتقسيم التدريجي للتصنيفات الفرعية
-        this.allSectionsList = [];      // قائمة بكل {mainCat, subCat}
-        this.visibleSectionsCount = 5;  // عدد الأقسام المعروضة في البداية
-        this.sectionsPerLoad = 5;       // عدد الأقسام الإضافية عند الضغط على "المزيد"
-        this.sectionsLoadMoreBtn = null; // زر واحد لتحميل أقسام إضافية
+        // هيكل جديد للتحميل التدريجي للتصنيفات الفرعية
+        this.allSectionsList = [];
+        this.visibleSectionsCount = 6;      // عدد الأقسام الظاهرة في البداية
+        this.sectionsPerLoad = 6;           // عدد الأقسام الإضافية عند الضغط
+        this.sectionsLoadMoreBtn = null;
         this.cards = [];
         this.imagesLoaded = 0;
         this.totalImages = 0;
@@ -45,7 +44,6 @@ export class ProductsGrid {
     loadData(data) {
         this.rawData = data;
         this.clear();
-        // بناء الخرائط كما هو
         for (const [mainCat, subCatsObj] of Object.entries(data)) {
             this.mainCategories.add(mainCat);
             const subSet = new Set();
@@ -62,7 +60,6 @@ export class ProductsGrid {
             }
             this.subCategoriesMap.set(mainCat, subSet);
         }
-        // بناء قائمة جميع الأقسام (مرتبة حسب التصنيف الرئيسي ثم الفرعي)
         this.buildAllSectionsList();
         this.renderVisibleSections();
     }
@@ -90,16 +87,14 @@ export class ProductsGrid {
 
     renderVisibleSections() {
         if (!this.productsGridDiv) return;
+        if (this.isRendering) return;
+        this.isRendering = true;
         this.productsGridDiv.innerHTML = '';
         this.cards = [];
         this.totalImages = 0;
         this.imagesLoaded = 0;
-        this.isRendering = true;
 
-        // تحديد عدد الأقسام المراد عرضها في هذه الدفعة
         const sectionsToShow = this.allSectionsList.slice(0, this.visibleSectionsCount);
-
-        // رسم الأقسام الظاهرة
         for (const { mainCat, subCat } of sectionsToShow) {
             const key = `${mainCat}|${subCat}`;
             let products = this.productsMap.get(key) || [];
@@ -113,7 +108,6 @@ export class ProductsGrid {
             }
         }
 
-        // إدارة زر "المزيد من التصنيفات"
         const hasMoreSections = this.allSectionsList.length > this.visibleSectionsCount;
         if (hasMoreSections && !this.searchQuery) {
             if (!this.sectionsLoadMoreBtn) {
@@ -140,20 +134,86 @@ export class ProductsGrid {
     }
 
     loadMoreSections() {
-        // زيادة عدد الأقسام المرئية
         this.visibleSectionsCount += this.sectionsPerLoad;
         this.renderVisibleSections();
     }
 
-    // باقي الدوال (renderSubCategoryFull, renderSubCategoryPaginated, createCardInstance, إلخ) كما هي دون تغيير كبير
-    // ولكن يجب تعديل createCardInstance لاستخدام lazy loading attribute
+    renderSubCategoryFull(mainCat, subCat, products) {
+        const sectionId = `sec-${mainCat}-${subCat}`;
+        let sectionEl = document.getElementById(sectionId);
+        if (!sectionEl) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'category-section';
+            wrapper.id = sectionId;
+            wrapper.innerHTML = `<div class="category-header" data-main="${mainCat}" data-sub="${subCat}">${mainCat} <span style="font-size:14px; color:var(--primary);"> / ${subCat}</span></div><div class="products-grid-inner" id="inner-${mainCat}-${subCat}"></div>`;
+            this.productsGridDiv.appendChild(wrapper);
+            sectionEl = wrapper;
+        }
+        const innerDiv = sectionEl.querySelector(`#inner-${mainCat}-${subCat}`);
+        if (!innerDiv) return;
+
+        innerDiv.innerHTML = '';
+        products.forEach(product => {
+            const card = this.createCardInstance(product, mainCat, subCat);
+            innerDiv.appendChild(card.element);
+            this.cards.push({ mainCat, subCat, card, element: card.element });
+            this.totalImages++;
+        });
+
+        const key = `${mainCat}|${subCat}`;
+        const btn = this.loadMoreButtons.get(key);
+        if (btn) btn.style.display = 'none';
+    }
+
+    renderSubCategoryPaginated(mainCat, subCat, products) {
+        const sectionId = `sec-${mainCat}-${subCat}`;
+        let sectionEl = document.getElementById(sectionId);
+        if (!sectionEl) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'category-section';
+            wrapper.id = sectionId;
+            wrapper.innerHTML = `<div class="category-header" data-main="${mainCat}" data-sub="${subCat}">${mainCat} <span style="font-size:14px; color:var(--primary);"> / ${subCat}</span></div><div class="products-grid-inner" id="inner-${mainCat}-${subCat}"></div>`;
+            this.productsGridDiv.appendChild(wrapper);
+            sectionEl = wrapper;
+        }
+        const key = `${mainCat}|${subCat}`;
+        const currentPage = this.currentPageMap.get(key) || 0;
+        const start = currentPage * CONFIG.ITEMS_PER_PAGE;
+        const end = start + CONFIG.ITEMS_PER_PAGE;
+        const pageProducts = products.slice(start, end);
+
+        const innerDiv = sectionEl.querySelector(`#inner-${mainCat}-${subCat}`);
+        if (!innerDiv) return;
+
+        if (currentPage === 0) innerDiv.innerHTML = '';
+
+        pageProducts.forEach(product => {
+            const card = this.createCardInstance(product, mainCat, subCat);
+            innerDiv.appendChild(card.element);
+            this.cards.push({ mainCat, subCat, card, element: card.element });
+            this.totalImages++;
+        });
+
+        this.currentPageMap.set(key, currentPage + 1);
+        const hasMore = end < products.length;
+        let loadBtn = this.loadMoreButtons.get(key);
+        if (!loadBtn && hasMore) {
+            loadBtn = document.createElement('button');
+            loadBtn.className = 'load-more-btn';
+            loadBtn.innerText = '➕ عرض المزيد';
+            loadBtn.addEventListener('click', () => this.renderSubCategoryPaginated(mainCat, subCat, products));
+            sectionEl.appendChild(loadBtn);
+            this.loadMoreButtons.set(key, loadBtn);
+        } else if (loadBtn) {
+            loadBtn.style.display = hasMore ? 'block' : 'none';
+        }
+    }
 
     createCardInstance(product, mainCat, subCat) {
         const savedCart = this.getCartMapFromStorage();
         const initialQty = savedCart[product.name] || 0;
         const card = new ProductCard(product, this.storage, (name, newQty, delta) => this.onCardQuantityChange(name, newQty, delta), initialQty);
         const cardElement = card.render();
-        // إضافة خاصية loading="lazy" للصورة (مدعوم في المتصفحات الحديثة)
         const img = cardElement.querySelector('.product-img');
         if (img) {
             img.loading = 'lazy';
@@ -167,14 +227,38 @@ export class ProductsGrid {
         return card;
     }
 
-    // الدوال التالية بقيت كما هي ولكنها تستخدم الدوال أعلاه
-    // ... (نفس الكود القديم لـ renderSubCategoryFull, renderSubCategoryPaginated, onCardQuantityChange, getCartMapFromStorage, saveCartMap, setActiveMainCategory, setActiveSubCategory, filterBySearch, resetAllPages, clear, getMainCategories, getSubCategoriesFor, getAllCartItems, removeItemFromCart, getTotalCartQuantity)
+    onCardQuantityChange(productName, newQty, delta) {
+        const cartMap = this.getCartMapFromStorage();
+        if (newQty === 0) delete cartMap[productName];
+        else cartMap[productName] = newQty;
+        this.saveCartMap(cartMap);
 
-    // يجب إعادة تعريف بعض الدوال التي تعتمد على allSectionsList بعد تغيير الفلاتر
+        let total = 0, totalQty = 0;
+        for (let cardObj of this.cards) {
+            const qty = cardObj.card.getQuantity();
+            if (qty > 0) {
+                totalQty += qty;
+                total += qty * cardObj.card.getProduct().price;
+            }
+        }
+        if (this.onGlobalQuantityChange) {
+            this.onGlobalQuantityChange(totalQty, total);
+        }
+    }
+
+    getCartMapFromStorage() {
+        const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.CART);
+        return saved ? JSON.parse(saved) : {};
+    }
+
+    saveCartMap(map) {
+        localStorage.setItem(CONFIG.STORAGE_KEYS.CART, JSON.stringify(map));
+    }
+
     setActiveMainCategory(cat) {
         this.activeMain = cat;
         this.activeSub = null;
-        this.visibleSectionsCount = 5; // إعادة تعيين عدد الأقسام الظاهرة
+        this.visibleSectionsCount = 6;
         this.buildAllSectionsList();
         this.resetAllPages();
         this.renderVisibleSections();
@@ -182,7 +266,7 @@ export class ProductsGrid {
 
     setActiveSubCategory(sub) {
         this.activeSub = (sub === 'all') ? null : sub;
-        this.visibleSectionsCount = 5;
+        this.visibleSectionsCount = 6;
         this.buildAllSectionsList();
         this.resetAllPages();
         this.renderVisibleSections();
@@ -190,13 +274,11 @@ export class ProductsGrid {
 
     filterBySearch(query) {
         this.searchQuery = query;
-        this.visibleSectionsCount = 5; // عند البحث، نعرض أكبر عدد ممكن من الأقسام (لأن البحث يقلل العدد)
         if (query.trim() !== '') {
-            // في حالة البحث، نريد عرض كل الأقسام التي تحتوي على نتائج على الفور، لكننا سنظهرها كلها مرة واحدة
-            // لتجنب التعقيد، سنعيد بناء القائمة ثم نعرضها كاملة
             this.buildAllSectionsList();
             this.visibleSectionsCount = this.allSectionsList.length;
         } else {
+            this.visibleSectionsCount = 6;
             this.buildAllSectionsList();
         }
         this.resetAllPages();
@@ -204,15 +286,64 @@ export class ProductsGrid {
         return this.cards.length;
     }
 
-    // الدوال المتبقية (getSectionsToRender لم تعد مستخدمة، استبدلنا بـ allSectionsList)
-    // نحتفظ بها للتوافق لكننا نلغي استخدامها
-    getSectionsToRender() {
-        return this.allSectionsList.slice(0, this.visibleSectionsCount);
+    resetAllPages() {
+        for (let key of this.currentPageMap.keys()) {
+            this.currentPageMap.set(key, 0);
+        }
+        this.loadMoreButtons.forEach(btn => btn.remove());
+        this.loadMoreButtons.clear();
     }
 
-    // ... يجب إضافة الدوال المفقودة من الكود القديم (الكثير منها موجود بالفعل)
-    // لحفظ المساحة، سأذكر فقط الدوال التي تحتاج تعديل. الباقي (مثل resetAllPages, clear, getMainCategories, إلخ) يبقى كما هو.
-}
+    clear() {
+        if (this.productsGridDiv) this.productsGridDiv.innerHTML = '';
+        this.cards = [];
+        this.mainCategories.clear();
+        this.subCategoriesMap.clear();
+        this.productsMap.clear();
+        this.currentPageMap.clear();
+        this.loadMoreButtons.clear();
+        this.totalImages = 0;
+        this.imagesLoaded = 0;
+        this.allSectionsList = [];
+        if (this.sectionsLoadMoreBtn) this.sectionsLoadMoreBtn.remove();
+        this.sectionsLoadMoreBtn = null;
+    }
 
-// يجب إضافة الكود المتبقي من ProductsGrid.js الأصلي (الدوال غير المذكورة أعلاه) 
-// نظراً لطول الرد، سأختصر، لكن في التطبيق الفعلي ستنسخ كامل الدوال من النسخة القديمة مع التعديلات أعلاه.
+    getMainCategories() {
+        return Array.from(this.mainCategories);
+    }
+
+    getSubCategoriesFor(mainCat) {
+        return Array.from(this.subCategoriesMap.get(mainCat) || []);
+    }
+
+    getAllCartItems() {
+        const items = [];
+        for (let cardObj of this.cards) {
+            const qty = cardObj.card.getQuantity();
+            if (qty > 0) {
+                items.push({
+                    name: cardObj.card.getProduct().name,
+                    quantity: qty,
+                    price: cardObj.card.getProduct().price
+                });
+            }
+        }
+        return items;
+    }
+
+    removeItemFromCart(productName) {
+        const cardObj = this.cards.find(c => c.card.getProduct().name === productName);
+        if (cardObj && cardObj.card.getQuantity() > 0) {
+            cardObj.card.changeQuantity(-cardObj.card.getQuantity());
+            return true;
+        }
+        return false;
+    }
+
+    getTotalCartQuantity() {
+        let total = 0;
+        for (let cardObj of this.cards) total += cardObj.card.getQuantity();
+        return total;
+    }
+}
