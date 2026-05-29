@@ -1,11 +1,11 @@
-import { CONFIG } from './config.js';
+import { CONFIG, escapeHtml } from './config.js';
 
 export class ProductCard {
     constructor(product, storage, onQuantityChange, initialQty = 0, cartManager = null) {
         this.product = product;
         this.storage = storage;
-        this.onQuantityChange = onQuantityChange; // callback (name, newQty, delta)
-        this.cartManager = cartManager;          // مرجع اختياري
+        this.onQuantityChange = onQuantityChange;
+        this.cartManager = cartManager;
         this.quantity = initialQty;
         this.element = null;
         this.qtyInput = null;
@@ -62,7 +62,6 @@ export class ProductCard {
         this.plusBtn = card.querySelector('.inc-qty');
         this.minusBtn = card.querySelector('.dec-qty');
         
-        // أحداث الأزرار
         this.plusBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.changeQuantity(1);
@@ -94,7 +93,7 @@ export class ProductCard {
     async loadImage() {
         if (!this.imageElement) return;
         const imageUrl = this.product.imageUrl;
-        if (!imageUrl) {
+        if (!imageUrl || !imageUrl.startsWith('http')) {
             this.setPlaceholderImage();
             return;
         }
@@ -103,7 +102,7 @@ export class ProductCard {
         try {
             cachedBlob = await this.storage.getImageBlob(imageUrl);
         } catch (e) {
-            console.warn("Error getting cached blob", e);
+            // تجاهل الخطأ
         }
 
         if (cachedBlob) {
@@ -127,43 +126,26 @@ export class ProductCard {
             return;
         }
 
+        this.imageElement.src = imageUrl;
+        this.imageElement.onerror = () => {
+            this.setPlaceholderImage();
+        };
+        
+        // محاولة تخزين الصورة (بدون canvas لتجنب CORS)
         try {
-            const img = new Image();
-            img.crossOrigin = "Anonymous";
-            img.onload = async () => {
-                // محاولة تخزين الصورة كـ blob (قد تفشل بسبب CORS، لكنها ليست حرجة)
-                try {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0);
-                    canvas.toBlob(async (blob) => {
-                        if (blob) {
-                            await this.storage.saveImageBlob(imageUrl, blob);
-                        }
-                        this.imageElement.src = imageUrl;
-                    });
-                } catch (e) {
-                    this.imageElement.src = imageUrl;
-                }
-                this.imageElement.onerror = () => this.setPlaceholderImage();
-            };
-            img.onerror = () => {
-                this.imageElement.src = imageUrl;
-                this.imageElement.onerror = () => this.setPlaceholderImage();
-            };
-            img.src = imageUrl;
-        } catch (err) {
-            console.warn(`Failed to load image: ${imageUrl}`, err);
-            this.imageElement.src = imageUrl;
-            this.imageElement.onerror = () => this.setPlaceholderImage();
+            const response = await fetch(imageUrl, { mode: 'cors' });
+            if (response.ok) {
+                const blob = await response.blob();
+                await this.storage.saveImageBlob(imageUrl, blob);
+            }
+        } catch (e) {
+            // تجاهل فشل التخزين - ليس مشكلة حرجة
         }
     }
 
     setPlaceholderImage() {
         if (this.imageElement) {
-            this.imageElement.src = CONFIG.IMAGE_PLACEHOLDER || 'https://via.placeholder.com/300?text=No+Image';
+            this.imageElement.src = CONFIG.IMAGE_PLACEHOLDER;
         }
     }
 
@@ -174,7 +156,6 @@ export class ProductCard {
             const subtotal = this.quantity * this.product.price;
             if (this.subtotalSpan) this.subtotalSpan.innerText = subtotal.toLocaleString();
             if (this.subtotalRow) this.subtotalRow.style.display = 'flex';
-            // إضافة تأثير نبض للبطاقة
             this.element.classList.add('added');
             setTimeout(() => this.element.classList.remove('added'), 300);
         } else {
@@ -209,18 +190,16 @@ export class ProductCard {
 
     notifyChange() {
         if (this.onQuantityChange) {
-            this.onQuantityChange(this.product.name, this.quantity, null);
+            this.onQuantityChange(this.product.name, this.quantity);
         }
     }
 
-    // تعيين الكمية من الخارج (عند تحديث السلة من CartManager)
     setQuantity(qty) {
         const maxStock = this.product.stock || 999;
         const newQty = Math.min(maxStock, Math.max(0, qty));
         if (newQty !== this.quantity) {
             this.quantity = newQty;
             this.updateUI();
-            // لا نستدعي notifyChange هنا لتجنب حلقة لا نهائية
         }
     }
 
@@ -231,15 +210,4 @@ export class ProductCard {
     getProduct() {
         return this.product;
     }
-}
-
-// دالة مساعدة لتشفير النص
-function escapeHtml(str) {
-    if (!str) return '';
-    return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
 }
