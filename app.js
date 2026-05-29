@@ -5,7 +5,7 @@ import { CategoryManager } from './CategoryManager.js';
 import { CartManager } from './CartManager.js';
 import { ThemeManager } from './ThemeManager.js';
 
-// بيانات تجريبية (Mock) - ستظهر فقط في حالة عدم وجود أي كاش ولا اتصال
+// بيانات تجريبية (Mock) - تستخدم فقط عند عدم وجود كاش ولا اتصال
 const MOCK_DATA = {
     "ملابس": {
         "رجالي": [
@@ -80,7 +80,7 @@ class App {
         this.setupProgressBar();
         this.setupSearch();
         
-        // عرض البيانات المخزنة أولاً
+        // عرض البيانات المخزنة أولاً (إن وجدت)
         let hasDisplayedData = false;
         try {
             const cachedData = await this.storage.getApiCache();
@@ -102,13 +102,17 @@ class App {
             hasDisplayedData = true;
         }
         
+        // إخفاء السكلتون
         const skeleton = document.getElementById('skeletonLoader');
         const productsGridDiv = document.getElementById('productsGrid');
         if (skeleton) skeleton.style.display = 'none';
         if (productsGridDiv) productsGridDiv.style.display = 'grid';
         
-        // محاولة جلب بيانات جديدة من الشبكة في الخلفية
+        // محاولة جلب بيانات جديدة في الخلفية
         this.fetchFreshDataInBackground();
+        
+        // بدء التحديث الدوري (كل 5 دقائق)
+        this.startPeriodicRefresh();
         
         this.setupNetworkListeners();
         this.setupSettingsModal();
@@ -128,6 +132,16 @@ class App {
         }
     }
     
+    startPeriodicRefresh() {
+        // تحديث البيانات كل 5 دقائق (300000 مللي)
+        setInterval(async () => {
+            if (navigator.onLine) {
+                console.log('[App] Periodic refresh attempt');
+                await this.fetchFreshDataWithRetry();
+            }
+        }, 300000);
+    }
+    
     async fetchFreshDataInBackground() {
         try {
             await this.fetchFreshDataWithRetry();
@@ -136,103 +150,123 @@ class App {
         }
     }
     
-    async fetchFreshDataWithRetry(retries = CONFIG.FETCH_RETRY_COUNT) {
-        for (let i = 0; i < retries; i++) {
+    // استراتيجية إعادة المحاولة مع تأخيرات متزايدة (لـ 503)
+    async fetchFreshDataWithRetry() {
+        const delays = CONFIG.RETRY_DELAYS || [2000, 5000, 10000];
+        let lastError = null;
+        
+        for (let i = 0; i <= delays.length; i++) {
             try {
-                await this.fetchFreshData();
-                return true;
+                const success = await this.fetchFreshData();
+                if (success) return true;
             } catch (err) {
-                console.warn(`[App] Fetch attempt ${i+1}/${retries} failed:`, err.message);
-                if (i === retries - 1) {
-                    return false;
+                lastError = err;
+                console.warn(`[App] Attempt ${i+1} failed:`, err.message);
+                
+                if (err.message.includes('503') && this.fullData) {
+                    this.showToast('الخادم مشغول حالياً (503)، سيتم إعادة المحاولة تلقائياً', 'warning');
                 }
-                await sleep(1500 * (i + 1));
+                
+                if (i < delays.length) {
+                    await sleep(delays[i]);
+                }
             }
         }
-        return false;
+        
+        // بعد فشل كل المحاولات
+        if (!this.fullData) {
+            this.showOfflinePage();
+        } else {
+            this.showOfflineToast(true, await this.storage.getLastUpdateTimestamp());
+            this.showToast('تعذر تحديث البيانات من الخادم حالياً، يتم عرض بيانات سابقة', 'error');
+        }
+        throw lastError || new Error('All fetch attempts failed');
     }
     
     async fetchFreshData() {
-        console.log('[App] Fetching fresh data from', CONFIG.API_URL);
+        console.log('[App] Fetching fresh data');
         
         if (!navigator.onLine) {
             throw new Error('لا يوجد اتصال بالإنترنت');
         }
         
         let data = null;
-        let errorMsg = null;
+        let primaryError = null;
         
-        // المحاولة الأولى: الرابط الرئيسي
+        // محاولة الرابط الأساسي
         try {
-            data = await this.fetchWithTimeout(CONFIG.API_URL);
+            data = await this.fetchWithTimeout(CONFIG.API_URL, CONFIG.FETCH_TIMEOUT);
             if (this.isValidDataStructure(data)) {
-                console.log('[App] Success from primary API');
                 await this.storage.saveApiCache(data);
                 this.renderFullData(data);
-                this.showToast('تم تحديث البيانات من الخادم', 'success');
+                this.showToast('تم تحديث البيانات بنجاح', 'success');
                 this.showOfflineToast(false);
                 this.hideOfflinePage();
-                return;
+                return true;
             } else {
-                errorMsg = 'بنية بيانات غير صحيحة من API الرئيسي';
-                console.warn(errorMsg, data);
+                throw new Error('Invalid data structure');
             }
         } catch (err) {
-            errorMsg = err.message;
-            console.error('[App] Primary API error:', err);
+            primaryError = err;
+            console.error('[App] Primary fetch error:', err.message);
+            if (err.message.includes('503') && this.fullData) {
+                this.showToast('الخادم غير متاح حالياً (503)، يتم عرض بيانات سابقة', 'warning');
+                return false;
+            }
         }
         
-        // المحاولة الثانية: الرابط الاحتياطي (إذا كان مفعلاً)
-        if (CONFIG.FALLBACK_API_URL && CONFIG.FALLBACK_API_URL !== "https://api.npoint.io/your-fallback-data") {
-            console.log('[App] Trying fallback API:', CONFIG.FALLBACK_API_URL);
+        // محاولة الرابط الاحتياطي (إذا تم تعيينه)
+        if (CONFIG.FALLBACK_API_URL && CONFIG.FALLBACK_API_URL.trim() !== "") {
+            console.log('[App] Trying fallback URL');
             try {
-                data = await this.fetchWithTimeout(CONFIG.FALLBACK_API_URL);
+                data = await this.fetchWithTimeout(CONFIG.FALLBACK_API_URL, 15000);
                 if (this.isValidDataStructure(data)) {
-                    console.log('[App] Success from fallback API');
                     await this.storage.saveApiCache(data);
                     this.renderFullData(data);
                     this.showToast('تم تحديث البيانات من الخادم الاحتياطي', 'success');
                     this.showOfflineToast(false);
                     this.hideOfflinePage();
-                    return;
-                } else {
-                    console.warn('Invalid data from fallback');
+                    return true;
                 }
-            } catch (err) {
-                console.error('[App] Fallback API error:', err);
-                errorMsg = err.message;
+            } catch (fallbackErr) {
+                console.error('[App] Fallback also failed:', fallbackErr.message);
             }
         }
         
-        // إذا وصلنا إلى هنا، فشلت جميع المحاولات
-        if (!this.fullData) {
-            this.showOfflinePage();
-        } else {
-            this.showOfflineToast(true, await this.storage.getLastUpdateTimestamp());
-        }
-        this.showToast(`فشل الاتصال بالخادم: ${errorMsg}`, 'error');
-        throw new Error(errorMsg);
+        throw primaryError || new Error('No valid data source');
     }
     
-    async fetchWithTimeout(url, timeout = CONFIG.FETCH_TIMEOUT) {
+    async fetchWithTimeout(url, timeout) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeout);
+        
         try {
-            const response = await fetch(url, { 
+            const response = await fetch(url, {
                 signal: controller.signal,
-                headers: { 
+                headers: {
                     'Accept': 'application/json',
-                    'Cache-Control': 'no-cache, no-store'
+                    'Cache-Control': 'no-cache'
                 },
                 mode: 'cors'
             });
             clearTimeout(timeoutId);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            if (response.status === 503) {
+                throw new Error(`503 Service Unavailable - الخادم مشغول`);
+            }
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
             const text = await response.text();
             let data;
-            try { data = JSON.parse(text); } catch(e) { throw new Error('JSON غير صالح'); }
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                throw new Error('Invalid JSON response');
+            }
             return data;
-        } catch(err) {
+        } catch (err) {
             clearTimeout(timeoutId);
             throw err;
         }
@@ -532,6 +566,7 @@ class App {
     }
 }
 
+// بدء التطبيق
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => new App());
 } else {
