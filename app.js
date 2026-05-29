@@ -5,6 +5,24 @@ import { CategoryManager } from './CategoryManager.js';
 import { CartManager } from './CartManager.js';
 import { ThemeManager } from './ThemeManager.js';
 
+// بيانات تجريبية (Mock) لاستخدامها في حالة فشل تحميل API أو عدم وجود كاش
+const MOCK_DATA = {
+    "ملابس": {
+        "رجالي": [
+            { name: "قميص قطني", price: 25000, imageUrl: "https://picsum.photos/id/20/300/300", stock: 10 },
+            { name: "بنطلون جينز", price: 45000, imageUrl: "https://picsum.photos/id/26/300/300", stock: 5 }
+        ],
+        "نسائي": [
+            { name: "فستان سهرة", price: 85000, imageUrl: "https://picsum.photos/id/30/300/300", stock: 3 }
+        ]
+    },
+    "إلكترونيات": {
+        "هواتف": [
+            { name: "هاتف ذكي", price: 250000, imageUrl: "https://picsum.photos/id/0/300/300", stock: 7 }
+        ]
+    }
+};
+
 class App {
     constructor() {
         this.storage = null;
@@ -18,28 +36,28 @@ class App {
     }
 
     async init() {
-        // تهيئة التخزين أولاً
+        console.log('[App] Starting initialization...');
+        
+        // 1. تهيئة التخزين
         this.storage = new StorageService();
         await this.storage.init();
+        console.log('[App] Storage initialized');
         
-        // تنظيف الكاش القديم في الخلفية (اختياري)
-        this.storage.cleanOldCache().catch(console.warn);
-        
-        // تهيئة مدير الثيم
+        // 2. تهيئة الثيم
         this.themeManager = new ThemeManager();
         
-        // تهيئة مدير السلة
+        // 3. تهيئة السلة
         this.cartManager = new CartManager(CONFIG.TARGET_NUMBER, (qty, total) => {
             this.updateCartUI(qty, total);
         });
         
-        // تهيئة شبكة المنتجات
+        // 4. تهيئة شبكة المنتجات
         this.productsGrid = new ProductsGrid('productsGrid', this.storage, this.cartManager, (totalQty, totalPrice) => {
             this.updateCartUI(totalQty, totalPrice);
             this.refreshCartDrawer();
         });
         
-        // تهيئة مدير التصنيفات
+        // 5. تهيئة مدير التصنيفات
         this.categoryManager = new CategoryManager(
             'mainChipsContainer',
             'subChipsContainer',
@@ -57,37 +75,72 @@ class App {
             }
         );
         
-        // تعيين回调 لإزالة المنتج من السلة
+        // 6. ربط إزالة المنتج من السلة
         this.cartManager.setRemoveItemCallback((productName) => {
             this.productsGrid.removeItemFromCart(productName);
             this.refreshCartDrawer();
         });
         
-        // إعداد شريط التقدم
+        // 7. شريط التقدم
         this.setupProgressBar();
         
-        // إعداد البحث
+        // 8. البحث
         this.setupSearch();
         
-        // عرض البيانات المخزنة مؤقتاً أولاً (تجربة سريعة)
-        await this.loadCachedDataAndDisplay();
+        // 9. محاولة عرض بيانات من الكاش أولاً
+        let hasDisplayedData = false;
+        try {
+            const cachedData = await this.storage.getApiCache();
+            if (cachedData && Object.keys(cachedData).length > 0) {
+                console.log('[App] Displaying cached data');
+                this.renderFullData(cachedData);
+                hasDisplayedData = true;
+                const timestamp = await this.storage.getLastUpdateTimestamp();
+                this.showOfflineToast(true, timestamp);
+            } else {
+                console.log('[App] No cache found, trying mock data...');
+                // عرض البيانات التجريبية كحل أخير
+                this.renderFullData(MOCK_DATA);
+                hasDisplayedData = true;
+                this.showOfflineToast(true, null, true); // إشعار ببيانات تجريبية
+            }
+        } catch (err) {
+            console.error('[App] Error loading cache:', err);
+            // عرض بيانات تجريبية عند فشل الكاش
+            this.renderFullData(MOCK_DATA);
+            hasDisplayedData = true;
+        }
         
-        // محاولة جلب بيانات جديدة من الشبكة
-        await this.fetchFreshDataWithRetry();
+        // إخفاء السكلتون
+        const skeleton = document.getElementById('skeletonLoader');
+        const productsGridDiv = document.getElementById('productsGrid');
+        if (skeleton) skeleton.style.display = 'none';
+        if (productsGridDiv) productsGridDiv.style.display = 'grid';
         
-        // إعداد المستمعات والإضافات
+        // 10. محاولة جلب بيانات جديدة من الشبكة في الخلفية
+        this.fetchFreshDataInBackground();
+        
+        // 11. إعدادات إضافية
         this.setupNetworkListeners();
         this.setupSettingsModal();
         this.setupCartDrawer();
         
-        // تحديث واجهة السلة بعد التحميل
+        // 12. تحديث واجهة السلة
         setTimeout(() => {
             this.updateCartUI(this.cartManager.totalQuantity, this.cartManager.totalPrice);
             this.refreshCartDrawer();
         }, 500);
     }
     
-    // ========== شريط التقدم ==========
+    // جلب البيانات في الخلفية دون تعطيل الواجهة
+    async fetchFreshDataInBackground() {
+        try {
+            await this.fetchFreshDataWithRetry();
+        } catch (err) {
+            console.warn('[App] Background fetch failed, keeping existing data');
+        }
+    }
+    
     setupProgressBar() {
         const progressBar = document.getElementById('globalProgress');
         const progressFill = progressBar?.querySelector('.progress-fill');
@@ -105,32 +158,6 @@ class App {
         }
     }
     
-    // ========== عرض البيانات المخزنة مؤقتاً ==========
-    async loadCachedDataAndDisplay() {
-        const skeleton = document.getElementById('skeletonLoader');
-        const productsGridDiv = document.getElementById('productsGrid');
-        
-        try {
-            const cachedData = await this.storage.getApiCache();
-            if (cachedData && Object.keys(cachedData).length > 0) {
-                console.log('[App] Using cached data');
-                this.renderFullData(cachedData);
-                const timestamp = await this.storage.getLastUpdateTimestamp();
-                this.showOfflineToast(true, timestamp);
-                if (skeleton) skeleton.style.display = 'none';
-                if (productsGridDiv) productsGridDiv.style.display = 'grid';
-                return true;
-            } else {
-                console.log('[App] No valid cache found');
-                return false;
-            }
-        } catch (err) {
-            console.error('[App] Error loading cache:', err);
-            return false;
-        }
-    }
-    
-    // ========== جلب بيانات جديدة مع إعادة المحاولة ==========
     async fetchFreshDataWithRetry(retries = CONFIG.FETCH_RETRY_COUNT) {
         for (let i = 0; i < retries; i++) {
             try {
@@ -139,25 +166,27 @@ class App {
             } catch (err) {
                 console.warn(`[App] Fetch attempt ${i+1}/${retries} failed:`, err.message);
                 if (i === retries - 1) {
-                    // فشلت كل المحاولات
                     if (!this.fullData) {
                         this.showOfflinePage();
                     } else {
                         this.showOfflineToast(true, await this.storage.getLastUpdateTimestamp());
                     }
-                    this.showToast('فشل تحميل البيانات من الخادم، يتم عرض نسخة مخزنة', 'error');
+                    this.showToast('فشل الاتصال بالخادم، يتم عرض بيانات مخزنة', 'error');
                 } else {
-                    // انتظار قبل إعادة المحاولة (تأخير تصاعدي)
-                    await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+                    await new Promise(r => setTimeout(r, 1500 * (i + 1)));
                 }
             }
         }
         return false;
     }
     
-    // ========== جلب البيانات من الشبكة ==========
     async fetchFreshData() {
         console.log('[App] Fetching fresh data from', CONFIG.API_URL);
+        
+        // فحص بسيط للإنترنت قبل المحاولة
+        if (!navigator.onLine) {
+            throw new Error('No internet connection');
+        }
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), CONFIG.FETCH_TIMEOUT);
@@ -167,8 +196,9 @@ class App {
                 signal: controller.signal,
                 headers: { 
                     'Accept': 'application/json',
-                    'Cache-Control': 'no-cache'
-                }
+                    'Cache-Control': 'no-cache, no-store'
+                },
+                mode: 'cors' // محاولة CORS صريحة
             });
             clearTimeout(timeoutId);
             
@@ -176,63 +206,72 @@ class App {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
-            const data = await response.json();
-            
-            // التحقق من صحة البيانات
-            if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
-                throw new Error('Invalid or empty data format');
+            const text = await response.text(); // نأخذ النص أولاً لتجنب مشاكل JSON الفارغ
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                throw new Error('Invalid JSON response: ' + e.message);
             }
             
-            // حفظ البيانات في الكاش
+            // التحقق من صحة البيانات: يجب أن يكون object وليس array فارغ
+            if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+                throw new Error('API returned empty or invalid data');
+            }
+            
+            // تخزين البيانات في الكاش
             await this.storage.saveApiCache(data);
             
-            // عرض البيانات
-            this.renderFullData(data);
+            // تحديث الواجهة إذا كانت البيانات مختلفة (اختياري)
+            if (JSON.stringify(this.fullData) !== JSON.stringify(data)) {
+                this.renderFullData(data);
+                this.showToast('تم تحديث البيانات من الخادم', 'success');
+            }
             
-            // إخفاء رسائل الأوفلاين
             this.showOfflineToast(false);
             this.hideOfflinePage();
             
-            // إشعار نجاح (اختياري)
-            this.showToast('تم تحديث البيانات بنجاح', 'success');
-            
         } catch (err) {
             clearTimeout(timeoutId);
-            console.error('[App] Fetch error:', err);
             throw err;
         }
     }
     
-    // ========== عرض البيانات في الواجهة ==========
     renderFullData(data) {
+        if (!data || Object.keys(data).length === 0) {
+            console.warn('[App] renderFullData called with empty data');
+            return;
+        }
+        
         this.fullData = data;
         this.productsGrid.loadData(data);
         
-        // تحديث التصنيفات الرئيسية
         const mainCats = this.productsGrid.getMainCategories();
+        if (mainCats.length === 0) {
+            console.warn('[App] No main categories found in data');
+            return;
+        }
+        
         this.categoryManager.buildMainChips(mainCats);
         
-        // تحديث خريطة التصنيفات الفرعية
         const subMap = new Map();
         for (const main of mainCats) {
             subMap.set(main, this.productsGrid.getSubCategoriesFor(main));
         }
         this.categoryManager.setSubCategoriesMap(subMap);
         
-        // استعادة التصنيف النشط إن وجد
         const currentMain = this.categoryManager.getCurrentMain();
         if (currentMain && currentMain !== 'all') {
             this.categoryManager.selectMainCategory(currentMain);
         }
         
-        // إخفاء السكلتون وإظهار الشبكة
+        // التأكد من إخفاء السكلتون
         const skeleton = document.getElementById('skeletonLoader');
         const gridDiv = document.getElementById('productsGrid');
         if (skeleton) skeleton.style.display = 'none';
         if (gridDiv) gridDiv.style.display = 'grid';
     }
     
-    // ========== البحث ==========
     setupSearch() {
         const searchInput = document.getElementById('searchInput');
         const clearSearch = document.getElementById('clearSearch');
@@ -261,7 +300,6 @@ class App {
         }
     }
     
-    // ========== دراور السلة ==========
     setupCartDrawer() {
         const drawer = document.getElementById('cartDrawer');
         const overlay = document.getElementById('cartOverlay');
@@ -288,7 +326,6 @@ class App {
             whatsappBtn.addEventListener('click', () => this.sendOrderToWhatsApp());
         }
         
-        // زر الواتساب في الفوتر الثابت
         const footerWhatsapp = document.getElementById('whatsappFooterBtn');
         if (footerWhatsapp) {
             footerWhatsapp.addEventListener('click', () => this.sendOrderToWhatsApp());
@@ -312,20 +349,20 @@ class App {
             const subtotal = item.quantity * item.price;
             total += subtotal;
             return `
-                <div class="cart-item" data-name="${escapeHtml(item.name)}">
+                <div class="cart-item" data-name="${this.escapeHtml(item.name)}">
                     <div class="cart-item-img">
-                        ${item.imageUrl ? `<img src="${escapeHtml(item.imageUrl)}" loading="lazy">` : '<i class="fas fa-box"></i>'}
+                        ${item.imageUrl ? `<img src="${this.escapeHtml(item.imageUrl)}" loading="lazy">` : '<i class="fas fa-box"></i>'}
                     </div>
                     <div class="cart-item-info">
-                        <div class="cart-item-name">${escapeHtml(item.name)}</div>
+                        <div class="cart-item-name">${this.escapeHtml(item.name)}</div>
                         <div class="cart-item-price">${item.price.toLocaleString()} ل.س</div>
                         <div class="cart-item-qty-control">
-                            <button class="cart-qty-dec" data-name="${escapeHtml(item.name)}">-</button>
+                            <button class="cart-qty-dec" data-name="${this.escapeHtml(item.name)}">-</button>
                             <span class="cart-item-qty">${item.quantity}</span>
-                            <button class="cart-qty-inc" data-name="${escapeHtml(item.name)}">+</button>
+                            <button class="cart-qty-inc" data-name="${this.escapeHtml(item.name)}">+</button>
                         </div>
                     </div>
-                    <button class="remove-item" data-name="${escapeHtml(item.name)}"><i class="fas fa-trash-alt"></i></button>
+                    <button class="remove-item" data-name="${this.escapeHtml(item.name)}"><i class="fas fa-trash-alt"></i></button>
                 </div>
             `;
         }).join('');
@@ -333,7 +370,6 @@ class App {
         drawerBody.innerHTML = html;
         if (drawerTotalSpan) drawerTotalSpan.innerText = total.toLocaleString();
         
-        // ربط أحداث الأزرار
         drawerBody.querySelectorAll('.cart-qty-dec').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const name = btn.getAttribute('data-name');
@@ -402,16 +438,21 @@ class App {
         window.open(url, '_blank');
     }
     
-    // ========== إدارة وضع الأوفلاين ==========
-    showOfflineToast(isCached, timestamp) {
+    showOfflineToast(isCached, timestamp, isMock = false) {
         const toast = document.getElementById('offlineToast');
         if (!toast) return;
         
-        if (isCached) {
+        if (isCached || isMock) {
             toast.style.display = 'flex';
             const timeSpan = document.getElementById('cacheTime');
-            if (timeSpan && timestamp) {
-                timeSpan.innerText = `آخر تحديث: ${new Date(timestamp).toLocaleTimeString()}`;
+            if (timeSpan) {
+                if (isMock) {
+                    timeSpan.innerText = 'بيانات تجريبية (غير متصل)';
+                } else if (timestamp) {
+                    timeSpan.innerText = `آخر تحديث: ${new Date(timestamp).toLocaleTimeString()}`;
+                } else {
+                    timeSpan.innerText = 'بيانات مخزنة محلياً';
+                }
             }
             const refreshBtn = document.getElementById('refreshDataBtn');
             if (refreshBtn) {
@@ -467,7 +508,6 @@ class App {
         });
     }
     
-    // ========== مودال الإعدادات ==========
     setupSettingsModal() {
         const settingsBtn = document.getElementById('settingsBtn');
         const modal = document.getElementById('settingsModal');
@@ -506,20 +546,19 @@ class App {
         toast.classList.add('show', type);
         setTimeout(() => toast.classList.remove('show', type), 3000);
     }
+    
+    escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
 }
 
-// دالة مساعدة لتشفير النص
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/[&<>]/g, function(m) {
-        if (m === '&') return '&amp;';
-        if (m === '<') return '&lt;';
-        if (m === '>') return '&gt;';
-        return m;
-    });
-}
-
-// بدء التطبيق عند تحميل الصفحة
+// بدء التطبيق
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => new App());
 } else {
