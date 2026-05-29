@@ -3,8 +3,8 @@ import { CONFIG } from './config.js';
 export class CartManager {
     constructor(targetNumber, onUpdate) {
         this.targetNumber = targetNumber;
-        this.onUpdate = onUpdate; // (totalQty, totalPrice)
-        this.items = new Map(); // key: productName => { quantity, price, imageUrl }
+        this.onUpdate = onUpdate;
+        this.items = new Map();
         this.totalQuantity = 0;
         this.totalPrice = 0;
         this.removeItemCallback = null;
@@ -18,7 +18,14 @@ export class CartManager {
                 const parsed = JSON.parse(saved);
                 this.items.clear();
                 for (const [name, data] of Object.entries(parsed)) {
-                    this.items.set(name, data);
+                    // التحقق من صحة البيانات قبل الإضافة
+                    if (data && typeof data.quantity === 'number' && typeof data.price === 'number') {
+                        this.items.set(name, {
+                            quantity: data.quantity,
+                            price: data.price,
+                            imageUrl: data.imageUrl || null
+                        });
+                    }
                 }
                 this.recalculateTotals();
             }
@@ -65,7 +72,9 @@ export class CartManager {
             this.items.delete(name);
             this.saveToStorage();
             this.recalculateTotals();
-            if (this.removeItemCallback) this.removeItemCallback(name);
+            if (this.removeItemCallback) {
+                this.removeItemCallback(name);
+            }
         }
     }
 
@@ -76,21 +85,6 @@ export class CartManager {
             price: data.price,
             imageUrl: data.imageUrl
         }));
-    }
-
-    updateFromCartItems(itemsArray) {
-        // لمزامنة السلة من مصدر خارجي (مثلاً عند استعادة السلة من productsGrid)
-        const newMap = new Map();
-        for (const item of itemsArray) {
-            newMap.set(item.name, {
-                quantity: item.quantity,
-                price: item.price,
-                imageUrl: item.imageUrl
-            });
-        }
-        this.items = newMap;
-        this.saveToStorage();
-        this.recalculateTotals();
     }
 
     setRemoveItemCallback(cb) {
