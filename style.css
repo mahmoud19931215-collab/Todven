@@ -1,5 +1,5 @@
-/* ==================== ملف الأنماط الرئيسي لتوجفن - نسخة محسنة للأجهزة الضعيفة ==================== */
-/* يدعم الوضع الليلي، الخطوط المتجاوبة، مع تحسينات الأداء */
+/* ==================== ملف الأنماط الرئيسي لتطوجفن - نسخة الأداء ==================== */
+/* تم تحسينه للأجهزة الضعيفة مع الحفاظ على المظهر الجذاب */
 
 /* ========== الثوابت والمتغيرات ========== */
 :root {
@@ -14,16 +14,13 @@
     --text-dark: #2c3e50;
     --text-light: #ecf0f1;
     --gray-muted: #95a5a6;
-    --border-light: rgba(255,255,255,0.25);
-    --border-dark: rgba(0,0,0,0.1);
-    --shadow-sm: 0 4px 12px rgba(0,0,0,0.1);
-    --shadow-md: 0 8px 24px rgba(0,0,0,0.15);
-    --shadow-lg: 0 20px 35px rgba(0,0,0,0.2);
-    --glass-bg: rgba(255,255,255,0.2);
-    --glass-border: 1px solid rgba(255,255,255,0.3);
-    --radius-card: 28px;
+    --border-light: rgba(255,255,255,0.3);
+    --border-dark: rgba(0,0,0,0.08);
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.08);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+    --radius-card: 24px;
     --radius-btn: 40px;
-    --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition: all 0.2s ease;
 }
 
 [data-theme="dark"] {
@@ -36,7 +33,6 @@
     --gray-muted: #6c7a89;
     --border-light: rgba(255,255,255,0.1);
     --border-dark: rgba(255,255,255,0.05);
-    --glass-bg: rgba(30,30,45,0.4);
 }
 
 * {
@@ -57,7 +53,7 @@ body {
     transition: background 0.3s, color 0.2s;
 }
 
-/* ========== الخلفية المتحركة (محسنة لتقليل استهلاك CPU) ========== */
+/* ========== خلفية ثابتة (بدون حركة مكثفة) ========== */
 .animated-bg {
     position: fixed;
     top: 0;
@@ -65,62 +61,61 @@ body {
     width: 100%;
     height: 100%;
     z-index: -2;
-    overflow: hidden;
     background: linear-gradient(135deg, #c8e8f5, #e0f2fe);
     transition: background 0.5s;
-    will-change: auto; /* لا نستخدم will-change للخلفية الثابتة */
 }
 
 [data-theme="dark"] .animated-bg {
     background: linear-gradient(135deg, #0a0f2a, #0b1a2e);
 }
 
-.day-scene, .night-scene {
-    position: relative;
-    width: 100%;
-    height: 100%;
+/* تبسيط الحركات: إزالة الرسوم المتحركة للغيوم على الأجهزة الضعيفة اختيارياً، لكننا نبقيها خفيفة */
+@media (prefers-reduced-motion: reduce) {
+    .cloud, .sun, .moon, .star {
+        animation: none !important;
+    }
 }
 
-.sun {
+.sun, .moon {
     position: absolute;
     top: 8%;
     right: 5%;
-    width: 70px;
-    height: 70px;
-    background: radial-gradient(circle, #ffdd77, #ffaa33);
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
-    box-shadow: 0 0 40px #ffcc44;
-    animation: float 6s infinite alternate, pulseGlow 2s infinite;
-    will-change: transform;
+}
+
+.sun {
+    background: radial-gradient(circle, #ffdd77, #ffaa33);
+    box-shadow: 0 0 30px #ffcc44;
+    animation: float 6s infinite alternate;
+}
+
+.moon {
+    background: #f5e6b0;
+    box-shadow: 0 0 20px #ffefb0;
+    animation: floatMoon 5s infinite alternate;
 }
 
 @keyframes float {
     0% { transform: translateY(0); }
-    100% { transform: translateY(-12px); }
+    100% { transform: translateY(-8px); }
 }
-@keyframes pulseGlow {
-    0% { box-shadow: 0 0 20px #ffcc44; opacity: 0.9; }
-    100% { box-shadow: 0 0 50px #ffaa33; opacity: 1; }
+@keyframes floatMoon {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-10px); }
 }
 
 .cloud {
     position: absolute;
-    background: rgba(255,255,255,0.9);
+    background: rgba(255,255,255,0.85);
     border-radius: 1000px;
     animation: moveCloud linear infinite;
-    will-change: transform;
 }
 
-.c1 { width: 160px; height: 70px; top: 15%; left: -180px; animation-duration: 22s; }
-.c2 { width: 210px; height: 85px; top: 45%; left: -250px; animation-duration: 28s; animation-delay: -5s; }
-.c3 { width: 130px; height: 55px; top: 70%; left: -150px; animation-duration: 18s; animation-delay: -10s; }
-
-/* إزالة الحركة على الأجهزة الضعيفة اختيارياً (يمكن تفعيلها عن طريق media query) */
-@media (prefers-reduced-motion: reduce) {
-    .sun, .cloud, .moon, .star {
-        animation: none !important;
-    }
-}
+.c1 { width: 140px; height: 60px; top: 15%; left: -160px; animation-duration: 25s; }
+.c2 { width: 180px; height: 75px; top: 45%; left: -200px; animation-duration: 30s; animation-delay: -5s; }
+.c3 { width: 110px; height: 45px; top: 70%; left: -130px; animation-duration: 20s; animation-delay: -10s; }
 
 .cloud:before, .cloud:after {
     content: '';
@@ -128,42 +123,19 @@ body {
     background: inherit;
     border-radius: 50%;
 }
-.c1:before { width: 70px; height: 70px; top: -30px; left: 20px; }
-.c1:after { width: 90px; height: 90px; top: -40px; left: 60px; }
-.c2:before { width: 100px; height: 100px; top: -40px; left: 30px; }
-.c2:after { width: 120px; height: 120px; top: -50px; left: 80px; }
-.c3:before { width: 60px; height: 60px; top: -25px; left: 15px; }
-.c3:after { width: 70px; height: 70px; top: -30px; left: 55px; }
+.c1:before { width: 60px; height: 60px; top: -25px; left: 20px; }
+.c1:after { width: 80px; height: 80px; top: -35px; left: 50px; }
+.c2:before { width: 85px; height: 85px; top: -35px; left: 25px; }
+.c2:after { width: 100px; height: 100px; top: -45px; left: 70px; }
+.c3:before { width: 50px; height: 50px; top: -20px; left: 15px; }
+.c3:after { width: 60px; height: 60px; top: -25px; left: 45px; }
 
 @keyframes moveCloud {
     from { transform: translateX(0); }
-    to { transform: translateX(calc(100vw + 300px)); }
+    to { transform: translateX(calc(100vw + 200px)); }
 }
 
-.moon {
-    position: absolute;
-    top: 8%;
-    right: 5%;
-    width: 65px;
-    height: 65px;
-    background: #f5e6b0;
-    border-radius: 50%;
-    box-shadow: 0 0 30px #ffefb0;
-    animation: floatMoon 5s infinite alternate;
-    will-change: transform;
-}
-
-@keyframes floatMoon {
-    0% { transform: translateY(0); }
-    100% { transform: translateY(-15px); }
-}
-
-.stars {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-}
-.star {
+.stars .star {
     position: absolute;
     background: white;
     border-radius: 50%;
@@ -172,19 +144,12 @@ body {
     opacity: 0;
     animation: twinkle 3s infinite;
 }
-.star:nth-child(1) { top: 20%; left: 15%; animation-delay: 0s; }
-.star:nth-child(2) { top: 40%; left: 70%; animation-delay: 0.6s; width: 3px; height: 3px; }
-.star:nth-child(3) { top: 60%; left: 30%; animation-delay: 1.2s; }
-.star:nth-child(4) { top: 80%; left: 85%; animation-delay: 1.8s; width: 2px; }
-.star:nth-child(5) { top: 15%; left: 45%; animation-delay: 2.4s; width: 3px; }
-.star:nth-child(6) { top: 55%; left: 10%; animation-delay: 3s; }
-
 @keyframes twinkle {
-    0%, 100% { opacity: 0; transform: scale(0.8); }
-    50% { opacity: 1; transform: scale(1.2); }
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
 }
 
-/* ========== شريط التقدم العام ========== */
+/* ========== شريط التقدم ========== */
 .global-progress {
     position: fixed;
     top: 0;
@@ -201,19 +166,23 @@ body {
     transition: width 0.1s linear;
 }
 
-/* ========== رأس التطبيق ========== */
+/* ========== رأس التطبيق (استخدام خلفية شبه شفافة خفيفة) ========== */
 .app-header {
     position: sticky;
     top: 0;
     z-index: 1000;
-    background: var(--glass-bg);
-    backdrop-filter: blur(12px);
-    border-bottom: var(--glass-border);
-    padding: 10px 16px;
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border-light);
+    padding: 8px 16px;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
+}
+
+[data-theme="dark"] .app-header {
+    background: rgba(20,20,35,0.85);
 }
 
 .header-actions {
@@ -222,21 +191,21 @@ body {
 }
 
 .icon-btn {
-    background: rgba(255,255,255,0.2);
-    border: var(--glass-border);
+    background: rgba(0,0,0,0.05);
+    border: none;
     border-radius: 50%;
-    width: 42px;
-    height: 42px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: var(--transition);
+    transition: transform 0.1s;
     color: var(--text-dark);
     position: relative;
 }
 .icon-btn:active {
-    transform: scale(0.92);
+    transform: scale(0.94);
 }
 .cart-icon .badge {
     position: absolute;
@@ -267,11 +236,10 @@ body {
 }
 #searchInput {
     width: 100%;
-    padding: 10px 35px 10px 12px;
+    padding: 8px 35px 8px 12px;
     border-radius: 40px;
-    border: var(--glass-border);
-    background: rgba(255,255,255,0.3);
-    backdrop-filter: blur(4px);
+    border: 1px solid var(--border-light);
+    background: rgba(255,255,255,0.5);
     color: var(--text-dark);
     font-size: 14px;
     outline: none;
@@ -302,28 +270,27 @@ body {
     display: flex;
     overflow-x: auto;
     gap: 8px;
-    padding: 12px 16px;
-    background: var(--glass-bg);
-    backdrop-filter: blur(8px);
+    padding: 10px 16px;
+    background: rgba(255,255,255,0.5);
+    backdrop-filter: blur(4px);
     margin: 8px 12px;
     border-radius: 50px;
     scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
 }
 .chips-horizontal::-webkit-scrollbar {
     display: none;
 }
 .chip {
-    padding: 6px 16px;
+    padding: 5px 14px;
     border-radius: 40px;
-    background: var(--glass-bg);
-    border: var(--glass-border);
+    background: rgba(255,255,255,0.7);
+    border: 1px solid var(--border-light);
     color: var(--text-dark);
     font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
     cursor: pointer;
-    transition: var(--transition);
+    transition: 0.1s;
 }
 .chip:active {
     transform: scale(0.96);
@@ -340,121 +307,112 @@ body {
 
 /* ========== شبكة المنتجات ========== */
 .main-container {
-    padding: 16px;
+    padding: 12px;
     max-width: 800px;
     margin: 0 auto;
 }
 .products-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+    gap: 16px;
 }
-/* بطاقة المنتج - تحسين الأداء: use transform for hover */
 .product-card {
-    background: var(--glass-bg);
-    backdrop-filter: blur(12px);
+    background: rgba(255,255,255,0.9);
     border-radius: var(--radius-card);
     overflow: hidden;
-    border: var(--glass-border);
-    transition: transform 0.25s ease, box-shadow 0.3s ease;
+    border: 1px solid var(--border-light);
+    transition: transform 0.2s, box-shadow 0.2s;
     cursor: pointer;
     display: flex;
     flex-direction: column;
-    will-change: transform;
+    box-shadow: var(--shadow-sm);
 }
 .product-card:hover {
-    transform: translateY(-6px);
+    transform: translateY(-3px);
     box-shadow: var(--shadow-md);
 }
-/* الصورة: تأخذ عرض الكرت بالكامل بدون أي padding */
 .product-img {
     width: 100%;
+    height: auto;
     display: block;
     object-fit: cover;
-    background: rgba(255,255,255,0.5);
+    background: #f0f0f0;
     padding: 0;
-    margin: 0;
-    transition: transform 0.3s ease;
-    border-radius: 28px 28px 0 0;
+    transition: transform 0.2s;
+    border-radius: 24px 24px 0 0;
 }
 .product-card:hover .product-img {
-    transform: scale(1.02);
+    transform: scale(1.01);
 }
 .product-info {
-    padding: 16px;
+    padding: 12px;
     text-align: center;
     flex: 1;
     display: flex;
     flex-direction: column;
 }
 .product-name {
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 800;
-    margin-bottom: 6px;
-    word-break: break-word;
+    margin-bottom: 4px;
 }
 .product-price {
-    font-size: 16px;
+    font-size: 15px;
     color: var(--primary);
     font-weight: bold;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
     display: inline-block;
-    background: rgba(46,204,113,0.2);
-    padding: 2px 12px;
+    background: rgba(46,204,113,0.15);
+    padding: 2px 10px;
     border-radius: 30px;
 }
 .qty-controls {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    margin-top: 8px;
+    gap: 8px;
+    margin-top: 6px;
 }
 .qty-btn.inc-qty, .qty-btn.dec-qty {
     border: none;
-    width: 38px;
-    height: 38px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
-    color: white;
-    font-size: 20px;
+    font-size: 18px;
     font-weight: bold;
     cursor: pointer;
-    transition: transform 0.1s ease;
+    transition: 0.1s;
 }
 .qty-btn.inc-qty {
     background: var(--primary);
+    color: white;
 }
 .qty-btn.inc-qty:active {
-    transform: scale(0.85);
+    transform: scale(0.9);
     background: var(--primary-dark);
 }
 .qty-btn.dec-qty {
     background: var(--danger);
+    color: white;
 }
 .qty-btn.dec-qty:active {
-    transform: scale(0.85);
+    transform: scale(0.9);
     background: var(--danger-dark);
 }
-[data-theme="dark"] .qty-btn.inc-qty {
-    background: var(--primary-dark);
-}
-[data-theme="dark"] .qty-btn.dec-qty {
-    background: #c0392b;
-}
 .qty-input {
-    width: 50px;
+    width: 45px;
     text-align: center;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: bold;
     background: transparent;
     border: 1px solid var(--border-light);
     border-radius: 30px;
-    padding: 6px;
+    padding: 4px;
     color: var(--text-dark);
 }
 .item-subtotal {
-    margin-top: 10px;
-    font-size: 13px;
+    margin-top: 8px;
+    font-size: 12px;
     font-weight: bold;
     color: var(--primary-dark);
 }
@@ -468,66 +426,66 @@ body {
     width: 90%;
     max-width: 500px;
     background: rgba(44,62,80,0.95);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(8px);
     border-radius: 50px;
-    padding: 12px 20px;
+    padding: 10px 18px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     z-index: 2000;
     visibility: hidden;
     opacity: 0;
-    transition: 0.3s;
-    box-shadow: var(--shadow-lg);
+    transition: 0.2s;
+    box-shadow: var(--shadow-md);
 }
 .cart-floating-footer.show {
     visibility: visible;
     opacity: 1;
-    bottom: 30px;
+    bottom: 25px;
 }
 .total-info {
     color: white;
 }
 .total-label {
-    font-size: 12px;
+    font-size: 11px;
     opacity: 0.8;
 }
 .total-value {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 800;
     margin: 0 4px;
 }
 .whatsapp-btn {
     background: var(--primary);
     border: none;
-    padding: 8px 20px;
+    padding: 6px 16px;
     border-radius: 40px;
     color: white;
     font-weight: bold;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     cursor: pointer;
-    transition: 0.2s;
+    transition: 0.1s;
 }
 .whatsapp-btn:active {
     transform: scale(0.96);
 }
 
-/* ========== دراور السلة (Drawer) ========== */
+/* ========== دراور السلة ========== */
 .drawer {
     position: fixed;
     top: 0;
     left: -100%;
     width: 85%;
-    max-width: 380px;
+    max-width: 360px;
     height: 100%;
     background: var(--light-bg);
     z-index: 3000;
-    transition: left 0.3s ease;
+    transition: left 0.25s ease;
     display: flex;
     flex-direction: column;
-    box-shadow: -5px 0 25px rgba(0,0,0,0.3);
+    box-shadow: -2px 0 12px rgba(0,0,0,0.2);
 }
 .drawer.open {
     left: 0;
@@ -542,38 +500,37 @@ body {
     z-index: 2999;
     visibility: hidden;
     opacity: 0;
-    transition: 0.2s;
+    transition: 0.15s;
 }
 .drawer-overlay.open {
     visibility: visible;
     opacity: 1;
 }
 .drawer-header {
-    padding: 20px;
+    padding: 16px;
     border-bottom: 1px solid var(--border-dark);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 20px;
+    font-size: 18px;
 }
 .drawer-close {
     background: none;
     border: none;
-    font-size: 28px;
+    font-size: 26px;
     cursor: pointer;
     color: var(--text-dark);
 }
 .drawer-body {
     flex: 1;
     overflow-y: auto;
-    padding: 16px;
-    -webkit-overflow-scrolling: touch;
+    padding: 12px;
 }
 .cart-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 0;
+    padding: 10px 0;
     border-bottom: 1px solid var(--border-dark);
 }
 .cart-item-info {
@@ -581,22 +538,23 @@ body {
 }
 .cart-item-name {
     font-weight: bold;
+    font-size: 14px;
 }
 .cart-item-price {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--primary);
 }
 .remove-item {
     background: #e74c3c;
     border: none;
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     color: white;
     cursor: pointer;
 }
 .drawer-footer {
-    padding: 16px;
+    padding: 12px;
     border-top: 1px solid var(--border-dark);
     display: flex;
     justify-content: space-between;
@@ -607,7 +565,7 @@ body {
 }
 .empty-cart {
     text-align: center;
-    padding: 40px;
+    padding: 30px;
     color: var(--gray-muted);
 }
 
@@ -619,14 +577,14 @@ body {
     width: 100%;
     height: 100%;
     background: rgba(0,0,0,0.6);
-    backdrop-filter: blur(5px);
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 4000;
     visibility: hidden;
     opacity: 0;
-    transition: 0.2s;
+    transition: 0.15s;
 }
 .modal.open {
     visibility: visible;
@@ -634,34 +592,34 @@ body {
 }
 .modal-card {
     background: var(--light-bg);
-    border-radius: 32px;
+    border-radius: 28px;
     width: 90%;
-    max-width: 400px;
+    max-width: 360px;
     overflow: hidden;
 }
 .modal-header {
-    padding: 16px 20px;
+    padding: 14px 18px;
     display: flex;
     justify-content: space-between;
     border-bottom: 1px solid var(--border-dark);
     font-weight: bold;
 }
 .modal-body {
-    padding: 20px;
+    padding: 18px;
 }
 .danger-btn {
     background: #e74c3c;
     color: white;
     border: none;
     width: 100%;
-    padding: 12px;
+    padding: 10px;
     border-radius: 40px;
-    font-size: 16px;
+    font-size: 14px;
     cursor: pointer;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 .hint {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--gray-muted);
     text-align: center;
 }
@@ -669,53 +627,53 @@ body {
 /* ========== سكلتون التحميل ========== */
 .skeleton-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+    gap: 16px;
 }
 .skeleton-card {
-    background: var(--glass-bg);
-    border-radius: 28px;
-    padding: 12px;
-    animation: pulse 1.2s infinite;
+    background: rgba(255,255,255,0.7);
+    border-radius: 24px;
+    padding: 10px;
+    animation: pulse 1s infinite;
 }
 .skeleton-img {
     width: 100%;
     aspect-ratio: 1;
-    background: rgba(0,0,0,0.1);
+    background: #e0e0e0;
     border-radius: 20px;
 }
 .skeleton-line {
-    height: 18px;
-    background: rgba(0,0,0,0.1);
-    margin: 12px 0;
-    border-radius: 10px;
+    height: 16px;
+    background: #e0e0e0;
+    margin: 10px 0;
+    border-radius: 8px;
 }
 .skeleton-line.short {
     width: 60%;
 }
 @keyframes pulse {
-    0% { opacity: 0.6; }
+    0% { opacity: 0.7; }
     50% { opacity: 1; }
-    100% { opacity: 0.6; }
+    100% { opacity: 0.7; }
 }
 
-/* ========== بانر وضع عدم الاتصال ========== */
+/* ========== بانر عدم الاتصال ========== */
 .offline-toast {
     background: #f39c12;
     color: #2c3e50;
-    margin: 10px 16px;
-    padding: 8px 16px;
+    margin: 8px 12px;
+    padding: 6px 12px;
     border-radius: 40px;
     display: flex;
     align-items: center;
-    gap: 12px;
-    font-size: 13px;
+    gap: 10px;
+    font-size: 12px;
     flex-wrap: wrap;
 }
 .offline-toast button {
     background: var(--primary);
     border: none;
-    padding: 4px 12px;
+    padding: 3px 10px;
     border-radius: 30px;
     color: white;
     cursor: pointer;
@@ -733,16 +691,33 @@ body {
     align-items: center;
     justify-content: center;
     text-align: center;
-    gap: 20px;
+    gap: 16px;
+}
+.load-more-sections-btn, .load-more-btn {
+    background: var(--primary);
+    border: none;
+    padding: 8px 20px;
+    border-radius: 40px;
+    color: white;
+    font-weight: bold;
+    display: block;
+    width: 80%;
+    margin: 15px auto;
+    text-align: center;
+    cursor: pointer;
+    transition: 0.1s;
+}
+.load-more-sections-btn:active, .load-more-btn:active {
+    transform: scale(0.97);
 }
 
-/* ========== تأثيرات إضافية ========== */
+/* تأثير الإضافة */
 .product-card.added {
-    animation: pop 0.3s ease;
+    animation: pop 0.2s ease;
 }
 @keyframes pop {
     0% { transform: scale(1); }
-    50% { transform: scale(1.02); background: rgba(46,204,113,0.2); }
+    50% { transform: scale(1.01); background: rgba(46,204,113,0.1); }
 }
 .highlight {
     background: #f1c40f;
@@ -751,7 +726,6 @@ body {
     padding: 0 2px;
 }
 
-/* ========== متجاوب مع الأجهزة الصغيرة ========== */
 @media (max-width: 640px) {
     .products-grid {
         grid-template-columns: 1fr;
@@ -762,13 +736,5 @@ body {
     .search-stats {
         width: 100%;
         text-align: center;
-    }
-}
-
-/* ========== تحسين إضافي للأجهزة الضعيفة: تقليل تأثير الـ backdrop-filter إذا كان الجهاز بطيئاً ========== */
-@media (prefers-reduced-motion: reduce) or (update: slow) {
-    .app-header, .chips-horizontal, .product-card, .cart-floating-footer, .offline-toast {
-        backdrop-filter: none !important;
-        background: var(--glass-bg) !important;
     }
 }
