@@ -1,344 +1,419 @@
-import { escapeHtml, CONFIG } from './config.js';
+import { CONFIG } from './config.js';
+import { ProductCard } from './ProductCard.js';
 
-export class CartManager {
-    constructor(targetNumber, onCartUpdate) {
-        this.targetNumber = targetNumber;
-        this.onCartUpdate = onCartUpdate;
-        this.cartDrawer = document.getElementById('cartDrawer');
-        this.drawerOverlay = document.getElementById('cartOverlay');
-        this.cartBadge = document.getElementById('cartBadge');
-        this.cartFooter = document.getElementById('cartFooter');
-        this.grandTotalSpan = document.getElementById('grandTotal');
-        this.cartItemsList = document.getElementById('cartItemsList');
-        this.drawerTotalSpan = document.getElementById('drawerTotal');
-        this.openDrawerBtn = document.getElementById('cartDrawerBtn');
-        this.closeDrawerBtns = document.querySelectorAll('.drawer-close');
-        this.whatsappFooterBtn = document.getElementById('whatsappFooterBtn');
-        this.drawerWhatsappBtn = document.getElementById('drawerWhatsappBtn');
+export class ProductsGrid {
+    constructor(containerId, storage, cartManager, onGlobalQuantityChange) {
+        this.container = document.getElementById(containerId);
+        this.storage = storage;
+        this.cartManager = cartManager;       // المصدر الموحد للعربة
+        this.onGlobalQuantityChange = onGlobalQuantityChange;
+        this.rawData = null;
+        this.mainCategories = new Set();
+        this.subCategoriesMap = new Map();
+        this.productsMap = new Map();          // key: "mainCat|subCat" -> products array
+        this.activeMain = 'all';
+        this.activeSub = null;
+        this.searchQuery = '';
+        this.currentPageMap = new Map();       // key: "mainCat|subCat" -> current page
+        this.loadMoreButtons = new Map();
+        this.allSectionsList = [];
+        this.visibleSectionsCount = 6;
+        this.sectionsPerLoad = 6;
+        this.sectionsLoadMoreBtn = null;
+        this.cards = [];                       // { mainCat, subCat, card, element }
+        this.imagesLoaded = 0;
+        this.totalImages = 0;
+        this.onImageProgress = null;
+        this.skeleton = document.getElementById('skeletonLoader');
+        this.productsGridDiv = document.getElementById('productsGrid');
+        this.isRendering = false;
+        this.renderQueue = [];
+        this.batchSize = 2;
         
-        // المخزن الرئيسي للعربة (Single Source of Truth)
-        this.items = []; // { name, quantity, price, imageUrl? }
-        this.totalQuantity = 0;
-        this.totalPrice = 0;
-        
-        // تحميل البيانات من localStorage عند البدء
-        this.loadFromStorage();
-        this.init();
+        // ربط النسخة العامة للاستدعاء من CartManager
+        if (typeof window !== 'undefined') {
+            window.productGridInstance = this;
+        }
     }
 
-    // تحميل العربة من localStorage
-    loadFromStorage() {
-        try {
-            const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.CART);
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                // التحقق من صيغة البيانات (قديمة أو جديدة)
-                if (Array.isArray(parsed)) {
-                    this.items = parsed;
-                } else if (typeof parsed === 'object') {
-                    // صيغة قديمة: { productName: quantity }
-                    this.items = Object.entries(parsed).map(([name, qty]) => ({
-                        name,
-                        quantity: qty,
-                        price: 0 // سيتم تحديث السعر لاحقاً عند توفر المنتج
-                    }));
-                } else {
-                    this.items = [];
-                }
-            } else {
-                this.items = [];
+    setImageProgressCallback(cb) {
+        this.onImageProgress = cb;
+    }
+
+    imageLoaded() {
+        this.imagesLoaded++;
+        if (this.onImageProgress && this.totalImages > 0) {
+            const percent = (this.imagesLoaded / this.totalImages) * 100;
+            this.onImageProgress(percent);
+        }
+    }
+
+    // تحميل البيانات الخام وبناء الهياكل
+    loadData(data) {
+        this.rawData = data;
+        this.clear();
+        // بناء الخرائط
+        for (const [mainCat, subCatsObj] of Object.entries(data)) {
+            this.mainCategories.add(mainCat);
+            const subSet = new Set();
+            for (const [subCat, products] of Object.entries(subCatsObj)) {
+                subSet.add(subCat);
+                const validProducts = products.map(p => ({
+                    ...p,
+                    name: p.name || p.title || 'منتج بدون اسم',
+                    price: parseFloat(p.price) || 0,
+                    stock: p.stock !== undefined ? p.stock : 999,
+                    imageUrl: (p.imageUrl && p.imageUrl.startsWith('http')) ? p.imageUrl : null
+                }));
+                const key = `${mainCat}|${subCat}`;
+                this.productsMap.set(key, validProducts);
+                this.currentPageMap.set(key, 0);
             }
-        } catch (e) {
-            console.warn("Failed to load cart from localStorage", e);
-            this.items = [];
+            this.subCategoriesMap.set(mainCat, subSet);
         }
-        this.recalculateTotals();
+        this.buildAllSectionsList();
+        this.renderVisibleSections();
     }
 
-    // حفظ العربة إلى localStorage
-    saveToStorage() {
-        try {
-            localStorage.setItem(CONFIG.STORAGE_KEYS.CART, JSON.stringify(this.items));
-        } catch (e) {
-            console.warn("Failed to save cart to localStorage", e);
-        }
-    }
-
-    // إعادة حساب الإجماليات
-    recalculateTotals() {
-        this.totalQuantity = this.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-        this.totalPrice = this.items.reduce((sum, item) => sum + ((item.quantity || 0) * (item.price || 0)), 0);
-        this.updateUI();
-        if (this.onCartUpdate) {
-            this.onCartUpdate(this.totalQuantity, this.totalPrice);
-        }
-    }
-
-    // تحديث واجهة المستخدم (البادج، الفوتر، الدراور)
-    updateUI() {
-        // تحديث البادج
-        if (this.cartBadge) {
-            this.cartBadge.innerText = this.totalQuantity;
-            this.cartBadge.style.display = this.totalQuantity > 0 ? 'flex' : 'none';
-        }
-        // تحديث الفوتر العائم
-        if (this.cartFooter) {
-            if (this.totalQuantity > 0) this.cartFooter.classList.add('show');
-            else this.cartFooter.classList.remove('show');
-        }
-        if (this.grandTotalSpan) {
-            this.grandTotalSpan.innerText = this.totalPrice.toLocaleString();
-        }
-        // تحديث محتوى الدراور إذا كان مفتوحاً
-        if (this.cartDrawer && this.cartDrawer.classList.contains('open')) {
-            this.updateDrawerContent();
-        }
-    }
-
-    // إضافة أو تحديث منتج في العربة
-    updateItem(productName, newQuantity, productPrice, productImage = null) {
-        if (newQuantity < 0) newQuantity = 0;
-        
-        const existingIndex = this.items.findIndex(item => item.name === productName);
-        
-        if (newQuantity === 0) {
-            // حذف المنتج
-            if (existingIndex !== -1) {
-                this.items.splice(existingIndex, 1);
+    // بناء قائمة الأقسام المرئية بناءً على الفلترة الحالية
+    buildAllSectionsList() {
+        this.allSectionsList = [];
+        if (this.activeMain === 'all') {
+            for (let mainCat of this.mainCategories) {
+                const subCats = this.subCategoriesMap.get(mainCat) || new Set();
+                for (let subCat of subCats) {
+                    this.allSectionsList.push({ mainCat, subCat });
+                }
             }
         } else {
-            if (existingIndex !== -1) {
-                // تحديث موجود
-                this.items[existingIndex].quantity = newQuantity;
-                this.items[existingIndex].price = productPrice;
-                if (productImage) this.items[existingIndex].imageUrl = productImage;
+            if (this.activeSub && this.activeSub !== 'all') {
+                this.allSectionsList.push({ mainCat: this.activeMain, subCat: this.activeSub });
             } else {
-                // إضافة جديد
-                this.items.push({
-                    name: productName,
-                    quantity: newQuantity,
-                    price: productPrice,
-                    imageUrl: productImage || null
-                });
+                const subCats = this.subCategoriesMap.get(this.activeMain) || new Set();
+                for (let subCat of subCats) {
+                    this.allSectionsList.push({ mainCat: this.activeMain, subCat });
+                }
             }
         }
-        
-        this.recalculateTotals();
-        this.saveToStorage();
-        
-        // إرجاع العنصر المحدث (للإشعارات)
-        return { name: productName, quantity: newQuantity, price: productPrice };
-    }
-
-    // الحصول على كمية منتج معين
-    getItemQuantity(productName) {
-        const item = this.items.find(item => item.name === productName);
-        return item ? item.quantity : 0;
-    }
-
-    // الحصول على سعر منتج معين (من العربة)
-    getItemPrice(productName) {
-        const item = this.items.find(item => item.name === productName);
-        return item ? item.price : 0;
-    }
-
-    // حذف منتج بالكامل من العربة
-    removeItem(productName) {
-        const index = this.items.findIndex(item => item.name === productName);
-        if (index !== -1) {
-            this.items.splice(index, 1);
-            this.recalculateTotals();
-            this.saveToStorage();
-            return true;
+        // إذا كان هناك بحث، نقوم بتصفية الأقسام التي تحتوي على منتجات مطابقة
+        if (this.searchQuery.trim()) {
+            const lowerQuery = this.searchQuery.toLowerCase();
+            this.allSectionsList = this.allSectionsList.filter(({ mainCat, subCat }) => {
+                const key = `${mainCat}|${subCat}`;
+                const products = this.productsMap.get(key) || [];
+                return products.some(p => p.name.toLowerCase().includes(lowerQuery));
+            });
         }
-        return false;
     }
 
-    // تفريغ العربة بالكامل
-    clearCart() {
-        this.items = [];
-        this.recalculateTotals();
-        this.saveToStorage();
+    // رسم الأقسام المرئية
+    renderVisibleSections() {
+        if (!this.productsGridDiv) return;
+        if (this.isRendering) return;
+        this.isRendering = true;
+        this.productsGridDiv.innerHTML = '';
+        this.cards = [];
+        this.totalImages = 0;
+        this.imagesLoaded = 0;
+        this.renderQueue = [];
+
+        const sectionsToShow = this.allSectionsList.slice(0, this.visibleSectionsCount);
+        for (const { mainCat, subCat } of sectionsToShow) {
+            this.renderQueue.push({ mainCat, subCat });
+        }
+        this.processRenderQueue();
+
+        const hasMoreSections = this.allSectionsList.length > this.visibleSectionsCount;
+        if (hasMoreSections && !this.searchQuery) {
+            if (!this.sectionsLoadMoreBtn) {
+                this.sectionsLoadMoreBtn = document.createElement('button');
+                this.sectionsLoadMoreBtn.className = 'load-more-sections-btn';
+                this.sectionsLoadMoreBtn.innerHTML = '<i class="fas fa-layer-group"></i> تحميل المزيد من التصنيفات';
+                this.sectionsLoadMoreBtn.addEventListener('click', () => this.loadMoreSections());
+                this.productsGridDiv.appendChild(this.sectionsLoadMoreBtn);
+            } else {
+                this.sectionsLoadMoreBtn.style.display = 'flex';
+            }
+        } else if (this.sectionsLoadMoreBtn) {
+            this.sectionsLoadMoreBtn.style.display = 'none';
+        }
+
+        if (this.searchQuery) {
+            if (this.sectionsLoadMoreBtn) this.sectionsLoadMoreBtn.style.display = 'none';
+            this.loadMoreButtons.forEach(btn => btn && (btn.style.display = 'none'));
+        }
+
+        if (this.skeleton) this.skeleton.style.display = 'none';
+        if (this.productsGridDiv) this.productsGridDiv.style.display = 'grid';
+        this.isRendering = false;
     }
 
-    // تحديث محتوى الدراور (القائمة الجانبية)
-    updateDrawerContent() {
-        if (!this.cartItemsList) return;
+    // معالجة قائمة انتظار الرسم (دفعات)
+    processRenderQueue() {
+        if (this.renderQueue.length === 0) return;
+        const batch = this.renderQueue.splice(0, this.batchSize);
+        for (const { mainCat, subCat } of batch) {
+            const key = `${mainCat}|${subCat}`;
+            let products = this.productsMap.get(key) || [];
+            if (this.searchQuery.trim()) {
+                const lowerQuery = this.searchQuery.toLowerCase();
+                products = products.filter(p => p.name.toLowerCase().includes(lowerQuery));
+                if (products.length === 0) continue;
+                this.renderSubCategoryFull(mainCat, subCat, products);
+            } else {
+                this.renderSubCategoryPaginated(mainCat, subCat, products);
+            }
+        }
+        if (this.renderQueue.length > 0) {
+            if (typeof requestIdleCallback !== 'undefined') {
+                requestIdleCallback(() => this.processRenderQueue(), { timeout: 100 });
+            } else {
+                setTimeout(() => this.processRenderQueue(), 10);
+            }
+        }
+    }
 
-        if (this.items.length === 0) {
-            this.cartItemsList.innerHTML = `
-                <div class="empty-cart-animation">
-                    <i class="fas fa-shopping-bag"></i>
-                    <p>سلة المشتريات فارغة</p>
-                    <span>أضف منتجاتك المفضلة</span>
+    // رسم قسم كامل (بدون تقطيع) - يستخدم للبحث
+    renderSubCategoryFull(mainCat, subCat, products) {
+        const sectionId = `sec-${mainCat}-${subCat}`.replace(/\s/g, '_');
+        let sectionEl = document.getElementById(sectionId);
+        if (!sectionEl) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'category-section';
+            wrapper.id = sectionId;
+            wrapper.innerHTML = `
+                <div class="category-header">
+                    <i class="fas fa-tag"></i>
+                    <span>${escapeHtml(mainCat)}</span>
+                    ${subCat ? `<span class="sub-cat-name"> / ${escapeHtml(subCat)}</span>` : ''}
                 </div>
+                <div class="products-grid-inner" id="inner-${mainCat}-${subCat}"></div>
             `;
-            if (this.drawerTotalSpan) this.drawerTotalSpan.innerText = '0';
-            return;
+            this.productsGridDiv.appendChild(wrapper);
+            sectionEl = wrapper;
         }
+        const innerDiv = sectionEl.querySelector(`#inner-${mainCat}-${subCat}`);
+        if (!innerDiv) return;
 
-        let html = '';
-        for (const item of this.items) {
-            html += `
-                <div class="cart-item" data-name="${escapeHtml(item.name)}">
-                    <div class="cart-item-img">
-                        ${item.imageUrl ? `<img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" loading="lazy">` : '<i class="fas fa-box"></i>'}
-                    </div>
-                    <div class="cart-item-info">
-                        <div class="cart-item-name">${escapeHtml(item.name)}</div>
-                        <div class="cart-item-price">${(item.price || 0).toLocaleString()} ل.س</div>
-                        <div class="cart-item-qty-control">
-                            <button class="cart-qty-dec" data-name="${escapeHtml(item.name)}">-</button>
-                            <span class="cart-item-qty">${item.quantity}</span>
-                            <button class="cart-qty-inc" data-name="${escapeHtml(item.name)}">+</button>
-                        </div>
-                    </div>
-                    <button class="remove-item" data-name="${escapeHtml(item.name)}"><i class="fas fa-trash-alt"></i></button>
+        innerDiv.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+        products.forEach(product => {
+            const card = this.createCardInstance(product, mainCat, subCat);
+            fragment.appendChild(card.element);
+            this.cards.push({ mainCat, subCat, card, element: card.element });
+            this.totalImages++;
+        });
+        innerDiv.appendChild(fragment);
+
+        const key = `${mainCat}|${subCat}`;
+        const btn = this.loadMoreButtons.get(key);
+        if (btn) btn.style.display = 'none';
+    }
+
+    // رسم قسم مع تقطيع (pagination)
+    renderSubCategoryPaginated(mainCat, subCat, products) {
+        const sectionId = `sec-${mainCat}-${subCat}`.replace(/\s/g, '_');
+        let sectionEl = document.getElementById(sectionId);
+        if (!sectionEl) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'category-section';
+            wrapper.id = sectionId;
+            wrapper.innerHTML = `
+                <div class="category-header">
+                    <i class="fas fa-folder-open"></i>
+                    <span>${escapeHtml(mainCat)}</span>
+                    ${subCat ? `<span class="sub-cat-name"> / ${escapeHtml(subCat)}</span>` : ''}
                 </div>
+                <div class="products-grid-inner" id="inner-${mainCat}-${subCat}"></div>
             `;
+            this.productsGridDiv.appendChild(wrapper);
+            sectionEl = wrapper;
         }
-        this.cartItemsList.innerHTML = html;
-        if (this.drawerTotalSpan) {
-            this.drawerTotalSpan.innerText = this.totalPrice.toLocaleString();
-        }
+        const key = `${mainCat}|${subCat}`;
+        const currentPage = this.currentPageMap.get(key) || 0;
+        const start = currentPage * CONFIG.ITEMS_PER_PAGE;
+        const end = start + CONFIG.ITEMS_PER_PAGE;
+        const pageProducts = products.slice(start, end);
 
-        // إضافة مستمعي الأحداث للتحكم في الكمية داخل الدراور
-        this.cartItemsList.querySelectorAll('.cart-qty-inc').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const name = btn.getAttribute('data-name');
-                const currentQty = this.getItemQuantity(name);
-                const price = this.getItemPrice(name);
-                if (price > 0) {
-                    this.updateItem(name, currentQty + 1, price);
-                    // نرسل إشارة إلى ProductsGrid لتحديث واجهة المنتج
-                    this.notifyProductQuantityChange(name, currentQty + 1);
+        const innerDiv = sectionEl.querySelector(`#inner-${mainCat}-${subCat}`);
+        if (!innerDiv) return;
+
+        if (currentPage === 0) innerDiv.innerHTML = '';
+
+        const fragment = document.createDocumentFragment();
+        pageProducts.forEach(product => {
+            const card = this.createCardInstance(product, mainCat, subCat);
+            fragment.appendChild(card.element);
+            this.cards.push({ mainCat, subCat, card, element: card.element });
+            this.totalImages++;
+        });
+        innerDiv.appendChild(fragment);
+
+        this.currentPageMap.set(key, currentPage + 1);
+        const hasMore = end < products.length;
+        let loadBtn = this.loadMoreButtons.get(key);
+        if (!loadBtn && hasMore) {
+            loadBtn = document.createElement('button');
+            loadBtn.className = 'load-more-btn';
+            loadBtn.innerHTML = '<i class="fas fa-chevron-down"></i> عرض المزيد';
+            loadBtn.addEventListener('click', () => this.renderSubCategoryPaginated(mainCat, subCat, products));
+            sectionEl.appendChild(loadBtn);
+            this.loadMoreButtons.set(key, loadBtn);
+        } else if (loadBtn) {
+            loadBtn.style.display = hasMore ? 'flex' : 'none';
+        }
+    }
+
+    // إنشاء كرت منتج واحد
+    createCardInstance(product, mainCat, subCat) {
+        const initialQty = this.cartManager.getItemQuantity(product.name);
+        // تمرير callback محدث: عند تغيير الكمية في البطاقة، نقوم بتحديث CartManager
+        const card = new ProductCard(
+            product, 
+            this.storage, 
+            (name, newQty, delta) => {
+                // تحديث العربة عبر CartManager (المصدر الوحيد)
+                this.cartManager.updateItem(name, newQty, product.price, product.imageUrl);
+                // تحديث الإجمالي العام
+                if (this.onGlobalQuantityChange) {
+                    this.onGlobalQuantityChange(this.cartManager.totalQuantity, this.cartManager.totalPrice);
                 }
-                this.updateDrawerContent(); // إعادة رسم للتحديث الفوري
-            });
-        });
-        
-        this.cartItemsList.querySelectorAll('.cart-qty-dec').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const name = btn.getAttribute('data-name');
-                const currentQty = this.getItemQuantity(name);
-                if (currentQty > 1) {
-                    const price = this.getItemPrice(name);
-                    this.updateItem(name, currentQty - 1, price);
-                    this.notifyProductQuantityChange(name, currentQty - 1);
-                } else if (currentQty === 1) {
-                    this.removeItem(name);
-                    this.notifyProductQuantityChange(name, 0);
-                }
-                this.updateDrawerContent();
-            });
-        });
-
-        this.cartItemsList.querySelectorAll('.remove-item').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const name = btn.getAttribute('data-name');
-                this.removeItem(name);
-                this.notifyProductQuantityChange(name, 0);
-                this.updateDrawerContent();
-            });
-        });
+            }, 
+            initialQty,
+            this.cartManager   // تمرير مرجع cartManager للاستخدام المباشر إذا لزم الأمر
+        );
+        const cardElement = card.render();
+        const img = cardElement.querySelector('.product-img');
+        if (img) {
+            img.loading = 'lazy';
+            if (!img.complete) {
+                img.addEventListener('load', () => this.imageLoaded());
+                img.addEventListener('error', () => this.imageLoaded());
+            } else {
+                this.imageLoaded();
+            }
+        }
+        return card;
     }
 
-    // إعلام ProductsGrid بتغير كمية منتج ما (لتحديث واجهة المنتج)
-    notifyProductQuantityChange(productName, newQuantity) {
-        if (window.productGridInstance && window.productGridInstance.updateProductQuantity) {
-            window.productGridInstance.updateProductQuantity(productName, newQuantity);
+    // دالة لتحديث كمية منتج معين من الخارج (تُستدعى من CartManager عند تغيير الكمية داخل الدراور)
+    updateProductQuantity(productName, newQuantity) {
+        const cardObj = this.cards.find(c => c.card.getProduct().name === productName);
+        if (cardObj && cardObj.card.getQuantity() !== newQuantity) {
+            cardObj.card.setQuantity(newQuantity);
+            // إعادة حساب الإجمالي العام
+            if (this.onGlobalQuantityChange) {
+                this.onGlobalQuantityChange(this.cartManager.totalQuantity, this.cartManager.totalPrice);
+            }
         }
     }
 
-    // فتح الدراور
-    openDrawer() {
-        if (this.cartDrawer) this.cartDrawer.classList.add('open');
-        if (this.drawerOverlay) this.drawerOverlay.classList.add('open');
-        this.updateDrawerContent();
-        // إضافة تأثير منع السكرول
-        document.body.style.overflow = 'hidden';
+    // تحميل المزيد من الأقسام
+    loadMoreSections() {
+        this.visibleSectionsCount += this.sectionsPerLoad;
+        this.renderVisibleSections();
     }
 
-    // إغلاق الدراور
-    closeDrawer() {
-        if (this.cartDrawer) this.cartDrawer.classList.remove('open');
-        if (this.drawerOverlay) this.drawerOverlay.classList.remove('open');
-        document.body.style.overflow = '';
+    // تعيين التصنيف الرئيسي النشط
+    setActiveMainCategory(cat) {
+        this.activeMain = cat;
+        this.activeSub = null;
+        this.visibleSectionsCount = 6;
+        this.buildAllSectionsList();
+        this.resetAllPages();
+        this.renderVisibleSections();
     }
 
-    // إرسال الطلب عبر واتساب
-    sendToWhatsApp() {
-        if (this.items.length === 0) {
-            this.showToast("السلة فارغة، أضف منتجات أولاً.", "warning");
-            return;
-        }
-        let message = "🛍️ *طلب جديد من توجفن*\n\n";
-        for (const item of this.items) {
-            const subtotal = item.quantity * item.price;
-            message += `▪️ *${item.name}*\n   ${item.quantity} × ${item.price.toLocaleString()} = ${subtotal.toLocaleString()} ل.س\n`;
-        }
-        message += "\n━━━━━━━━━━━━━━━━━━━\n";
-        message += `💰 *الإجمالي النهائي: ${this.totalPrice.toLocaleString()} ل.س*\n`;
-        message += "📦 *الشكر لتوجفن*";
-        
-        window.open(`https://wa.me/${this.targetNumber}?text=${encodeURIComponent(message)}`, '_blank');
+    // تعيين التصنيف الفرعي النشط
+    setActiveSubCategory(sub) {
+        this.activeSub = (sub === 'all') ? null : sub;
+        this.visibleSectionsCount = 6;
+        this.buildAllSectionsList();
+        this.resetAllPages();
+        this.renderVisibleSections();
     }
 
-    // دالة مساعدة لعرض إشعارات (toast)
-    showToast(message, type = "info") {
-        let toast = document.getElementById('dynamicToast');
-        if (!toast) {
-            toast = document.createElement('div');
-            toast.id = 'dynamicToast';
-            toast.className = 'dynamic-toast';
-            document.body.appendChild(toast);
+    // فلترة حسب نص البحث
+    filterBySearch(query) {
+        this.searchQuery = query;
+        this.visibleSectionsCount = 6;
+        this.buildAllSectionsList();
+        if (this.searchQuery.trim() !== '') {
+            // في حالة البحث، نعرض كل الأقسام التي تحتوي على نتائج
+            this.visibleSectionsCount = this.allSectionsList.length;
         }
-        toast.textContent = message;
-        toast.classList.add('show', type);
-        setTimeout(() => {
-            toast.classList.remove('show', type);
-        }, 2500);
+        this.resetAllPages();
+        this.renderVisibleSections();
+        // إرجاع عدد البطاقات المعروضة
+        return this.cards.length;
     }
 
-    // تحديث العربة من بيانات خارجية (مثلاً بعد التزامن)
-    syncFromExternal(itemsArray) {
-        this.items = itemsArray.filter(item => item.quantity > 0);
-        this.recalculateTotals();
-        this.saveToStorage();
-        this.updateDrawerContent();
+    // إعادة تعيين الصفحات وأزرار التحميل
+    resetAllPages() {
+        for (let key of this.currentPageMap.keys()) {
+            this.currentPageMap.set(key, 0);
+        }
+        this.loadMoreButtons.forEach(btn => btn && btn.remove());
+        this.loadMoreButtons.clear();
     }
 
-    // دالة للحصول على نسخة من العربة (للقراءة فقط)
-    getCartItems() {
-        return [...this.items];
+    // تفريغ جميع البيانات
+    clear() {
+        if (this.productsGridDiv) this.productsGridDiv.innerHTML = '';
+        this.cards = [];
+        this.mainCategories.clear();
+        this.subCategoriesMap.clear();
+        this.productsMap.clear();
+        this.currentPageMap.clear();
+        this.loadMoreButtons.clear();
+        this.totalImages = 0;
+        this.imagesLoaded = 0;
+        this.allSectionsList = [];
+        if (this.sectionsLoadMoreBtn) this.sectionsLoadMoreBtn.remove();
+        this.sectionsLoadMoreBtn = null;
     }
 
-    init() {
-        if (this.openDrawerBtn) {
-            this.openDrawerBtn.addEventListener('click', () => this.openDrawer());
-        }
-        if (this.closeDrawerBtns) {
-            this.closeDrawerBtns.forEach(btn => {
-                btn.addEventListener('click', () => this.closeDrawer());
-            });
-        }
-        if (this.drawerOverlay) {
-            this.drawerOverlay.addEventListener('click', () => this.closeDrawer());
-        }
-        if (this.whatsappFooterBtn) {
-            this.whatsappFooterBtn.addEventListener('click', () => this.sendToWhatsApp());
-        }
-        if (this.drawerWhatsappBtn) {
-            this.drawerWhatsappBtn.addEventListener('click', () => {
-                this.sendToWhatsApp();
-                this.closeDrawer();
-            });
-        }
-        
-        // تحديث الواجهة الأولية
-        this.updateUI();
+    // دوال مساعدة للتصنيفات
+    getMainCategories() {
+        return Array.from(this.mainCategories);
     }
+
+    getSubCategoriesFor(mainCat) {
+        return Array.from(this.subCategoriesMap.get(mainCat) || []);
+    }
+
+    // الحصول على جميع عناصر العربة من CartManager (بدون الاعتماد على البطاقات)
+    getAllCartItems() {
+        return this.cartManager.getCartItems();
+    }
+
+    // إزالة منتج من العربة (يُستدعى من CartManager)
+    removeItemFromCart(productName) {
+        this.cartManager.removeItem(productName);
+        // تحديث واجهة البطاقة إذا كانت موجودة
+        const cardObj = this.cards.find(c => c.card.getProduct().name === productName);
+        if (cardObj && cardObj.card.getQuantity() > 0) {
+            cardObj.card.setQuantity(0);
+        }
+        if (this.onGlobalQuantityChange) {
+            this.onGlobalQuantityChange(this.cartManager.totalQuantity, this.cartManager.totalPrice);
+        }
+        return true;
+    }
+
+    // الحصول على إجمالي الكميات (من CartManager)
+    getTotalCartQuantity() {
+        return this.cartManager.totalQuantity;
+    }
+}
+
+// دالة escapeHtml يجب أن تكون معرفة مسبقاً (من config.js) لكن نضيفها هنا احتياطاً
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
 }
