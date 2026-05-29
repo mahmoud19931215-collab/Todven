@@ -56,9 +56,15 @@ export class CartManager {
     }
 
     updateFromCartItems(cartItems) {
-        this.items = [...cartItems];
-        this.totalQuantity = this.items.reduce((sum, i) => sum + i.quantity, 0);
-        this.totalPrice = this.items.reduce((sum, i) => sum + (i.quantity * i.price), 0);
+        this.items = cartItems; // تجنب إنشاء نسخة جديدة غير ضرورية
+        let newTotalQuantity = 0;
+        let newTotalPrice = 0;
+        for (let i = 0; i < this.items.length; i++) {
+            newTotalQuantity += this.items[i].quantity;
+            newTotalPrice += this.items[i].quantity * this.items[i].price;
+        }
+        this.totalQuantity = newTotalQuantity;
+        this.totalPrice = newTotalPrice;
 
         if (this.cartBadge) {
             this.cartBadge.innerText = this.totalQuantity;
@@ -89,7 +95,8 @@ export class CartManager {
         }
 
         let html = '';
-        for (const item of this.items) {
+        for (let i = 0; i < this.items.length; i++) {
+            const item = this.items[i];
             html += `
                 <div class="cart-item" data-name="${escapeHtml(item.name)}">
                     <div class="cart-item-info">
@@ -106,16 +113,18 @@ export class CartManager {
             this.drawerTotalSpan.innerText = this.totalPrice.toLocaleString();
         }
 
-        const removeBtns = this.cartItemsList.querySelectorAll('.remove-item');
-        removeBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const name = btn.getAttribute('data-name');
-                if (name && this.onRemoveItemCallback) {
-                    this.onRemoveItemCallback(name);
+        // إضافة الأحداث مرة واحدة باستخدام event delegation بدلاً من الإضافة لكل زر
+        // نضيف مستمع واحد على الحاوية
+        if (!this.cartItemsList._listenerAdded) {
+            this.cartItemsList.addEventListener('click', (e) => {
+                const btn = e.target.closest('.remove-item');
+                if (btn && this.onRemoveItemCallback) {
+                    const name = btn.getAttribute('data-name');
+                    if (name) this.onRemoveItemCallback(name);
                 }
             });
-        });
+            this.cartItemsList._listenerAdded = true;
+        }
     }
 
     setRemoveItemCallback(callback) {
@@ -128,13 +137,13 @@ export class CartManager {
             return;
         }
         let message = "";
-        for (const item of this.items) {
+        for (let i = 0; i < this.items.length; i++) {
+            const item = this.items[i];
             const subtotal = item.quantity * item.price;
             message += `🛒 *${item.name}*\n   ${item.quantity} قطعة × ${item.price.toLocaleString()} = ${subtotal.toLocaleString()} ل.س\n`;
         }
         message += "--------------------------\n";
         message += `💰 *الإجمالي النهائي: ${this.totalPrice.toLocaleString()} ل.س*`;
-        const url = `https://wa.me/${this.targetNumber}?text=${encodeURIComponent(message)}`;
-        window.open(url, '_blank');
+        window.open(`https://wa.me/${this.targetNumber}?text=${encodeURIComponent(message)}`, '_blank');
     }
 }
