@@ -4,12 +4,7 @@ export const CONFIG = {
     TARGET_NUMBER: "963945083365",
     
     // رابط API الرئيسي (Google Sheets)
-    // تأكد من أن هذا الرابط يعيد بيانات JSON بالصيغة الصحيحة:
-    // { "تصنيف رئيسي": { "تصنيف فرعي": [ { "name": "...", "price": 0, "imageUrl": "...", "stock": 0 } ] } }
     API_URL: "https://script.google.com/macros/s/AKfycbwrXoE1tAYJb6D19UM9M-FSUDE9AMd73cj0u35bL7tyG902QN0B6nuDFisNQfgEwELq/exec",
-    
-    // رابط API احتياطي (اختياري) – يمكن تعيينه لاختبار البيانات
-    // FALLBACK_API_URL: "https://api.jsonbin.io/v3/b/...",
     
     // إعدادات العرض
     ITEMS_PER_PAGE: 12,
@@ -18,7 +13,7 @@ export const CONFIG = {
     // إعدادات الكاش والتخزين
     CACHE_TTL: 3600000,        // 1 hour
     DB_NAME: "TogvenDB",
-    DB_VERSION: 5,              // تمت الترقية لتجنب تعارض الكاش القديم
+    DB_VERSION: 6,              // تمت الترقية لتجنب تعارض الكاش القديم
     STORES: {
         IMAGES: "images",
         API_CACHE: "apiCache"
@@ -26,8 +21,8 @@ export const CONFIG = {
     
     // إعدادات الشبكة
     DEBOUNCE_DELAY: 150,
-    FETCH_RETRY_COUNT: 3,       // عدد محاولات إعادة جلب البيانات
-    FETCH_TIMEOUT: 15000,       // 15 ثانية (زيادة المهلة)
+    FETCH_RETRY_COUNT: 3,
+    FETCH_TIMEOUT: 15000,
     
     // الثيم الافتراضي
     DEFAULT_THEME: "light",
@@ -40,7 +35,7 @@ export const CONFIG = {
     },
     
     // إعدادات الصور
-    IMAGE_PLACEHOLDER: "https://via.placeholder.com/300?text=No+Image",
+    IMAGE_PLACEHOLDER: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Crect width='300' height='300' fill='%23e2e8f0'/%3E%3Ctext x='150' y='160' text-anchor='middle' fill='%2394a3b8' font-size='14'%3Eلا توجد صورة%3C/text%3E%3C/svg%3E",
     IMAGE_LOADING_TIMEOUT: 8000,
     MAX_IMAGE_RETRIES: 2
 };
@@ -56,8 +51,7 @@ export function getProductKey(productName, category = "") {
 // التحقق من صحة رابط الصورة
 export function isValidImageUrl(url) {
     return url && typeof url === 'string' && 
-           (url.startsWith("http://") || url.startsWith("https://")) &&
-           !url.includes("placeholder");
+           (url.startsWith("http://") || url.startsWith("https://"));
 }
 
 // دالة تأخير (Promise)
@@ -71,7 +65,7 @@ export function formatCurrency(amount) {
     return amount.toLocaleString("ar-EG") + " ل.س";
 }
 
-// ترميز النص لـ HTML
+// ترميز النص لـ HTML (دالة موحدة)
 export function escapeHtml(str) {
     if (!str) return "";
     return str
