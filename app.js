@@ -1,11 +1,11 @@
-import { CONFIG } from './config.js';
+import { CONFIG, escapeHtml } from './config.js';
 import { StorageService } from './StorageService.js';
 import { ProductsGrid } from './ProductsGrid.js';
 import { CategoryManager } from './CategoryManager.js';
 import { CartManager } from './CartManager.js';
 import { ThemeManager } from './ThemeManager.js';
 
-// بيانات تجريبية (Mock) لاستخدامها في حالة فشل تحميل API أو عدم وجود كاش
+// بيانات تجريبية (Mock) للاستخدام في حالة فشل API
 const MOCK_DATA = {
     "ملابس": {
         "رجالي": [
@@ -38,26 +38,29 @@ class App {
     async init() {
         console.log('[App] Starting initialization...');
         
-        // 1. تهيئة التخزين
+        // 1. تسجيل Service Worker
+        this.registerServiceWorker();
+        
+        // 2. تهيئة التخزين
         this.storage = new StorageService();
         await this.storage.init();
         console.log('[App] Storage initialized');
         
-        // 2. تهيئة الثيم
+        // 3. تهيئة الثيم
         this.themeManager = new ThemeManager();
         
-        // 3. تهيئة السلة
+        // 4. تهيئة السلة
         this.cartManager = new CartManager(CONFIG.TARGET_NUMBER, (qty, total) => {
             this.updateCartUI(qty, total);
         });
         
-        // 4. تهيئة شبكة المنتجات
+        // 5. تهيئة شبكة المنتجات
         this.productsGrid = new ProductsGrid('productsGrid', this.storage, this.cartManager, (totalQty, totalPrice) => {
             this.updateCartUI(totalQty, totalPrice);
             this.refreshCartDrawer();
         });
         
-        // 5. تهيئة مدير التصنيفات
+        // 6. تهيئة مدير التصنيفات
         this.categoryManager = new CategoryManager(
             'mainChipsContainer',
             'subChipsContainer',
@@ -75,19 +78,19 @@ class App {
             }
         );
         
-        // 6. ربط إزالة المنتج من السلة
+        // 7. ربط إزالة المنتج من السلة (بدون حلقة لا نهائية)
         this.cartManager.setRemoveItemCallback((productName) => {
             this.productsGrid.removeItemFromCart(productName);
             this.refreshCartDrawer();
         });
         
-        // 7. شريط التقدم
+        // 8. شريط التقدم
         this.setupProgressBar();
         
-        // 8. البحث
+        // 9. البحث
         this.setupSearch();
         
-        // 9. محاولة عرض بيانات من الكاش أولاً
+        // 10. محاولة عرض بيانات من الكاش أولاً
         let hasDisplayedData = false;
         try {
             const cachedData = await this.storage.getApiCache();
@@ -99,14 +102,12 @@ class App {
                 this.showOfflineToast(true, timestamp);
             } else {
                 console.log('[App] No cache found, trying mock data...');
-                // عرض البيانات التجريبية كحل أخير
                 this.renderFullData(MOCK_DATA);
                 hasDisplayedData = true;
-                this.showOfflineToast(true, null, true); // إشعار ببيانات تجريبية
+                this.showOfflineToast(true, null, true);
             }
         } catch (err) {
             console.error('[App] Error loading cache:', err);
-            // عرض بيانات تجريبية عند فشل الكاش
             this.renderFullData(MOCK_DATA);
             hasDisplayedData = true;
         }
@@ -117,22 +118,29 @@ class App {
         if (skeleton) skeleton.style.display = 'none';
         if (productsGridDiv) productsGridDiv.style.display = 'grid';
         
-        // 10. محاولة جلب بيانات جديدة من الشبكة في الخلفية
+        // 11. محاولة جلب بيانات جديدة من الشبكة
         this.fetchFreshDataInBackground();
         
-        // 11. إعدادات إضافية
+        // 12. إعدادات إضافية
         this.setupNetworkListeners();
         this.setupSettingsModal();
         this.setupCartDrawer();
         
-        // 12. تحديث واجهة السلة
+        // 13. تحديث واجهة السلة
         setTimeout(() => {
             this.updateCartUI(this.cartManager.totalQuantity, this.cartManager.totalPrice);
             this.refreshCartDrawer();
         }, 500);
     }
     
-    // جلب البيانات في الخلفية دون تعطيل الواجهة
+    registerServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('[SW] Registered successfully:', reg))
+                .catch(err => console.error('[SW] Registration failed:', err));
+        }
+    }
+    
     async fetchFreshDataInBackground() {
         try {
             await this.fetchFreshDataWithRetry();
@@ -183,7 +191,6 @@ class App {
     async fetchFreshData() {
         console.log('[App] Fetching fresh data from', CONFIG.API_URL);
         
-        // فحص بسيط للإنترنت قبل المحاولة
         if (!navigator.onLine) {
             throw new Error('No internet connection');
         }
@@ -198,7 +205,7 @@ class App {
                     'Accept': 'application/json',
                     'Cache-Control': 'no-cache, no-store'
                 },
-                mode: 'cors' // محاولة CORS صريحة
+                mode: 'cors'
             });
             clearTimeout(timeoutId);
             
@@ -206,7 +213,7 @@ class App {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
-            const text = await response.text(); // نأخذ النص أولاً لتجنب مشاكل JSON الفارغ
+            const text = await response.text();
             let data;
             try {
                 data = JSON.parse(text);
@@ -214,15 +221,12 @@ class App {
                 throw new Error('Invalid JSON response: ' + e.message);
             }
             
-            // التحقق من صحة البيانات: يجب أن يكون object وليس array فارغ
             if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
                 throw new Error('API returned empty or invalid data');
             }
             
-            // تخزين البيانات في الكاش
             await this.storage.saveApiCache(data);
             
-            // تحديث الواجهة إذا كانت البيانات مختلفة (اختياري)
             if (JSON.stringify(this.fullData) !== JSON.stringify(data)) {
                 this.renderFullData(data);
                 this.showToast('تم تحديث البيانات من الخادم', 'success');
@@ -248,7 +252,7 @@ class App {
         
         const mainCats = this.productsGrid.getMainCategories();
         if (mainCats.length === 0) {
-            console.warn('[App] No main categories found in data');
+            console.warn('[App] No main categories found');
             return;
         }
         
@@ -265,7 +269,6 @@ class App {
             this.categoryManager.selectMainCategory(currentMain);
         }
         
-        // التأكد من إخفاء السكلتون
         const skeleton = document.getElementById('skeletonLoader');
         const gridDiv = document.getElementById('productsGrid');
         if (skeleton) skeleton.style.display = 'none';
@@ -349,20 +352,20 @@ class App {
             const subtotal = item.quantity * item.price;
             total += subtotal;
             return `
-                <div class="cart-item" data-name="${this.escapeHtml(item.name)}">
+                <div class="cart-item" data-name="${escapeHtml(item.name)}">
                     <div class="cart-item-img">
-                        ${item.imageUrl ? `<img src="${this.escapeHtml(item.imageUrl)}" loading="lazy">` : '<i class="fas fa-box"></i>'}
+                        ${item.imageUrl ? `<img src="${escapeHtml(item.imageUrl)}" loading="lazy">` : '<i class="fas fa-box"></i>'}
                     </div>
                     <div class="cart-item-info">
-                        <div class="cart-item-name">${this.escapeHtml(item.name)}</div>
+                        <div class="cart-item-name">${escapeHtml(item.name)}</div>
                         <div class="cart-item-price">${item.price.toLocaleString()} ل.س</div>
                         <div class="cart-item-qty-control">
-                            <button class="cart-qty-dec" data-name="${this.escapeHtml(item.name)}">-</button>
+                            <button class="cart-qty-dec" data-name="${escapeHtml(item.name)}">-</button>
                             <span class="cart-item-qty">${item.quantity}</span>
-                            <button class="cart-qty-inc" data-name="${this.escapeHtml(item.name)}">+</button>
+                            <button class="cart-qty-inc" data-name="${escapeHtml(item.name)}">+</button>
                         </div>
                     </div>
-                    <button class="remove-item" data-name="${this.escapeHtml(item.name)}"><i class="fas fa-trash-alt"></i></button>
+                    <button class="remove-item" data-name="${escapeHtml(item.name)}"><i class="fas fa-trash-alt"></i></button>
                 </div>
             `;
         }).join('');
@@ -545,16 +548,6 @@ class App {
         toast.textContent = message;
         toast.classList.add('show', type);
         setTimeout(() => toast.classList.remove('show', type), 3000);
-    }
-    
-    escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/[&<>]/g, function(m) {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
-        });
     }
 }
 
