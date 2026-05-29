@@ -4,8 +4,8 @@ export class ProductCard {
     constructor(product, storage, onQuantityChange, initialQty = 0, cartManager = null) {
         this.product = product;
         this.storage = storage;
-        this.onQuantityChange = onQuantityChange;
-        this.cartManager = cartManager;   // مرجع اختياري للعربة
+        this.onQuantityChange = onQuantityChange; // callback (name, newQty, delta)
+        this.cartManager = cartManager;          // مرجع اختياري
         this.quantity = initialQty;
         this.element = null;
         this.qtyInput = null;
@@ -15,7 +15,7 @@ export class ProductCard {
         this.imageElement = null;
         this.plusBtn = null;
         this.minusBtn = null;
-        this.isUpdating = false;   // منع التحديثات المتكررة
+        this.isUpdating = false;
     }
 
     render() {
@@ -62,7 +62,7 @@ export class ProductCard {
         this.plusBtn = card.querySelector('.inc-qty');
         this.minusBtn = card.querySelector('.dec-qty');
         
-        // إضافة المستمعين
+        // أحداث الأزرار
         this.plusBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.changeQuantity(1);
@@ -85,7 +85,6 @@ export class ProductCard {
             this.qtyInput.value = this.quantity;
         });
 
-        // تحميل الصورة
         this.loadImage();
         this.updateUI();
         
@@ -129,11 +128,10 @@ export class ProductCard {
         }
 
         try {
-            // استخدم img عادي للتغلب على CORS إن أمكن
             const img = new Image();
             img.crossOrigin = "Anonymous";
             img.onload = async () => {
-                // محاولة تخزين الصورة كـ blob عبر canvas (قد يفشل لـ CORS لكنها محاولة)
+                // محاولة تخزين الصورة كـ blob (قد تفشل بسبب CORS، لكنها ليست حرجة)
                 try {
                     const canvas = document.createElement('canvas');
                     canvas.width = img.width;
@@ -144,7 +142,7 @@ export class ProductCard {
                         if (blob) {
                             await this.storage.saveImageBlob(imageUrl, blob);
                         }
-                        this.imageElement.src = imageUrl; // نعرض الصورة الأصلية
+                        this.imageElement.src = imageUrl;
                     });
                 } catch (e) {
                     this.imageElement.src = imageUrl;
@@ -165,7 +163,7 @@ export class ProductCard {
 
     setPlaceholderImage() {
         if (this.imageElement) {
-            this.imageElement.src = 'https://via.placeholder.com/300?text=No+Image';
+            this.imageElement.src = CONFIG.IMAGE_PLACEHOLDER || 'https://via.placeholder.com/300?text=No+Image';
         }
     }
 
@@ -182,7 +180,6 @@ export class ProductCard {
         } else {
             if (this.subtotalRow) this.subtotalRow.style.display = 'none';
         }
-        // تعطيل زر الزيادة إذا وصل للمخزون
         const maxStock = this.product.stock || 999;
         if (this.plusBtn) {
             this.plusBtn.disabled = (this.quantity >= maxStock);
@@ -216,14 +213,14 @@ export class ProductCard {
         }
     }
 
-    // تعيين الكمية من الخارج (مثلاً عند تحديث العربة من الدراور)
+    // تعيين الكمية من الخارج (عند تحديث السلة من CartManager)
     setQuantity(qty) {
         const maxStock = this.product.stock || 999;
         const newQty = Math.min(maxStock, Math.max(0, qty));
         if (newQty !== this.quantity) {
             this.quantity = newQty;
             this.updateUI();
-            // لا نستدعي notifyChange هنا لتجنب حلقة لا نهائية، لأن المتغير قد أتى من CartManager أصلاً
+            // لا نستدعي notifyChange هنا لتجنب حلقة لا نهائية
         }
     }
 
@@ -236,7 +233,7 @@ export class ProductCard {
     }
 }
 
-// دالة escapeHtml مساعدة
+// دالة مساعدة لتشفير النص
 function escapeHtml(str) {
     if (!str) return '';
     return str
