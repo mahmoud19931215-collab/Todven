@@ -22,27 +22,18 @@ class App {
         this.storage = new StorageService();
         await this.storage.init();
         
-        // 2. تهيئة مدير الثيم
+        // 2. مدير الثيم
         this.themeManager = new ThemeManager();
         
-        // 3. تهيئة مدير السلة (بدون callback مؤقت)
-        this.cartManager = new CartManager(CONFIG.TARGET_NUMBER, (qty, total) => {
-            // هذا الكallback يُستدعى بعد كل تحديث للعربة
-            this.updateCartUI(qty, total);
+        // 3. مدير السلة (النسخة القديمة – سيتم استبدالها لاحقاً لكن نتركها كما هي حالياً)
+        this.cartManager = new CartManager(CONFIG.TARGET_NUMBER, (qty, total) => {});
+        
+        // 4. شبكة المنتجات (بدون cartManager مؤقتاً)
+        this.productsGrid = new ProductsGrid('productsGrid', this.storage, (totalQty, totalPrice) => {
+            this.cartManager.updateFromCartItems(this.productsGrid.getAllCartItems());
         });
         
-        // 4. تهيئة شبكة المنتجات (نمرر cartManager)
-        this.productsGrid = new ProductsGrid(
-            'productsGrid', 
-            this.storage, 
-            this.cartManager,
-            (totalQty, totalPrice) => {
-                // تحديث إضافي إذا لزم الأمر
-                this.updateCartUI(totalQty, totalPrice);
-            }
-        );
-        
-        // 5. تهيئة مدير التصنيفات
+        // 5. مدير التصنيفات
         this.categoryManager = new CategoryManager(
             'mainChipsContainer',
             'subChipsContainer',
@@ -60,12 +51,13 @@ class App {
             }
         );
         
-        // 6. إعداد callback لإزالة المنتج من السلة (يُستخدم في CartManager لإعلام ProductsGrid)
-        this.cartManager.setRemoveItemCallback ? this.cartManager.setRemoveItemCallback((productName) => {
+        // 6. إزالة منتج من السلة
+        this.cartManager.setRemoveItemCallback((productName) => {
             this.productsGrid.removeItemFromCart(productName);
-        }) : null;
+            this.cartManager.updateFromCartItems(this.productsGrid.getAllCartItems());
+        });
         
-        // 7. إعداد شريط تقدم تحميل الصور
+        // 7. شريط التقدم
         const progressBar = document.getElementById('globalProgress');
         const progressFill = progressBar?.querySelector('.progress-fill');
         if (progressBar && progressFill) {
@@ -79,7 +71,7 @@ class App {
             });
         }
         
-        // 8. إعداد البحث
+        // 8. البحث
         const searchInput = document.getElementById('searchInput');
         const clearSearch = document.getElementById('clearSearch');
         const searchStats = document.getElementById('searchStats');
@@ -88,11 +80,7 @@ class App {
                 const query = e.target.value;
                 const count = this.productsGrid.filterBySearch(query);
                 if (searchStats) {
-                    if (query.trim()) {
-                        searchStats.innerHTML = `<i class="fas fa-search"></i> ${count} نتيجة`;
-                    } else {
-                        searchStats.innerHTML = '';
-                    }
+                    searchStats.innerText = query.trim() ? `${count} نتيجة` : '';
                 }
                 if (clearSearch) clearSearch.style.display = query ? 'flex' : 'none';
             });
@@ -101,60 +89,108 @@ class App {
             clearSearch.addEventListener('click', () => {
                 if (searchInput) searchInput.value = '';
                 this.productsGrid.filterBySearch('');
-                if (searchStats) searchStats.innerHTML = '';
+                if (searchStats) searchStats.innerText = '';
                 clearSearch.style.display = 'none';
             });
         }
         
-        // 9. عرض البيانات المخزنة مؤقتاً أولاً
+        // 9. عرض البيانات المخزنة مؤقتاً أولاً (إن وجدت)
         const skeleton = document.getElementById('skeletonLoader');
         const productsGridDiv = document.getElementById('productsGrid');
         const cachedData = await this.storage.getApiCache();
-        if (cachedData && Object.keys(cachedData).length) {
+        if (cachedData && Object.keys(cachedData).length > 0) {
+            console.log('[App] Using cached data');
             this.renderFullData(cachedData);
             this.showOfflineToast(true, this.storage.getLastUpdateTimestamp());
             if (skeleton) skeleton.style.display = 'none';
             if (productsGridDiv) productsGridDiv.style.display = 'grid';
+        } else {
+            console.log('[App] No valid cache found');
         }
         
-        // 10. جلب بيانات جديدة من الشبكة
-        this.fetchFreshData();
+        // 10. جلب بيانات جديدة (مع محاولة إعادة المحاولة)
+        await this.fetchFreshDataWithRetry();
         
-        // 11. إعداد مستمعي الشبكة
+        // 11. مستمعي الشبكة
         this.setupNetworkListeners();
         
-        // 12. إعداد مودال الإعدادات
+        // 12. إعدادات المودال
         this.setupSettingsModal();
         
-        // 13. عرض إشعار ترحيبي للمستخدم الجديد
-        this.showWelcomeMessage();
-        
-        // 14. تحديث واجهة السلة الأولية
-        this.updateCartUI(this.cartManager.totalQuantity, this.cartManager.totalPrice);
+        // 13. تحديث السلة بعد فترة قصيرة
+        setTimeout(() => {
+            this.cartManager.updateFromCartItems(this.productsGrid.getAllCartItems());
+        }, 500);
+    }
+    
+    async fetchFreshDataWithRetry(retries = CONFIG.FETCH_RETRY_COUNT) {
+        for (let i = 0; i < retries; i++) {
+            try {
+                await this.fetchFreshData();
+                return; // نجاح
+            } catch (err) {
+                console.warn(`[App] Fetch attempt ${i+1} failed:`, err);
+                if (i === retries - 1) {
+                    // الفشل النهائي
+                    if (!this.fullData) {
+                        this.showOfflinePage();
+                    } else {
+                        this.showOfflineToast(true, this.storage.getLastUpdateTimestamp());
+                    }
+                    this.showToast('فشل تحميل البيانات من الخادم', 'error');
+                } else {
+                    // انتظار قبل إعادة المحاولة
+                    await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+                }
+            }
+        }
     }
     
     async fetchFreshData() {
+        console.log('[App] Fetching fresh data from', CONFIG.API_URL);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), CONFIG.FETCH_TIMEOUT);
+        
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), CONFIG.FETCH_TIMEOUT);
-            const response = await fetch(CONFIG.API_URL, { signal: controller.signal });
+            const response = await fetch(CONFIG.API_URL, { 
+                signal: controller.signal,
+                headers: {
+                    'Accept': 'application/json',
+                    'Cache-Control': 'no-cache'
+                }
+            });
             clearTimeout(timeoutId);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
             const data = await response.json();
-            if (!data || typeof data !== 'object') throw new Error("Invalid data");
+            console.log('[App] Received data:', data);
+            
+            // التحقق من صحة البيانات
+            if (!data || typeof data !== 'object') {
+                throw new Error('Invalid data format: not an object');
+            }
+            
+            // التأكد من وجود تصنيفات على الأقل
+            if (Object.keys(data).length === 0) {
+                throw new Error('Empty data object');
+            }
+            
+            // حفظ في الكاش
             await this.storage.saveApiCache(data);
+            
+            // عرض البيانات
             this.renderFullData(data);
             this.showOfflineToast(false);
             this.hideOfflinePage();
-            this.showToast("تم تحديث البيانات بنجاح", "success");
+            this.showToast('تم تحديث البيانات بنجاح', 'success');
+            
         } catch (err) {
-            console.error("Fetch failed:", err);
-            if (!this.fullData) {
-                this.showOfflinePage();
-            } else {
-                this.showOfflineToast(true, this.storage.getLastUpdateTimestamp());
-                this.showToast("لا يوجد اتصال بالإنترنت، يتم عرض نسخة مخبأة", "warning");
-            }
+            clearTimeout(timeoutId);
+            console.error('[App] Fetch failed:', err);
+            throw err; // لإعادة المحاولة من الأعلى
         }
     }
     
@@ -178,18 +214,6 @@ class App {
         if (gridDiv) gridDiv.style.display = 'grid';
     }
     
-    updateCartUI(qty, total) {
-        // تحديث أي عناصر إضافية في الواجهة إن وجدت
-        const cartFooter = document.getElementById('cartFooter');
-        if (cartFooter) {
-            if (qty > 0) cartFooter.classList.add('show');
-            else cartFooter.classList.remove('show');
-        }
-        // تحديث النص في الفوتر إذا كان موجوداً
-        const grandTotalSpan = document.getElementById('grandTotal');
-        if (grandTotalSpan) grandTotalSpan.innerText = total.toLocaleString();
-    }
-    
     showOfflineToast(isCached, timestamp) {
         const toast = document.getElementById('offlineToast');
         if (!toast) return;
@@ -197,13 +221,16 @@ class App {
             toast.style.display = 'flex';
             const timeSpan = document.getElementById('cacheTime');
             if (timeSpan && timestamp) {
-                timeSpan.innerText = `آخر تحديث: ${new Date(timestamp).toLocaleTimeString('ar-EG')}`;
+                timeSpan.innerText = `آخر تحديث: ${new Date(timestamp).toLocaleTimeString()}`;
             }
             const refreshBtn = document.getElementById('refreshDataBtn');
             if (refreshBtn) {
                 refreshBtn.onclick = () => {
-                    if (navigator.onLine) this.fetchFreshData();
-                    else this.showToast("لا يوجد اتصال بالإنترنت", "error");
+                    if (navigator.onLine) {
+                        this.fetchFreshDataWithRetry();
+                    } else {
+                        this.showToast('لا يوجد اتصال بالإنترنت', 'warning');
+                    }
                 };
             }
             const closeToast = document.getElementById('closeToastBtn');
@@ -221,9 +248,9 @@ class App {
             retryBtn.onclick = () => {
                 if (navigator.onLine) {
                     offlinePage.style.display = 'none';
-                    this.fetchFreshData();
+                    this.fetchFreshDataWithRetry();
                 } else {
-                    this.showToast("لا توجد شبكة، يرجى التحقق من الاتصال", "error");
+                    this.showToast('لا توجد شبكة', 'error');
                 }
             };
         }
@@ -238,13 +265,13 @@ class App {
         window.addEventListener('online', () => {
             this.isOnline = true;
             this.hideOfflinePage();
-            this.fetchFreshData();
-            this.showToast("تم استعادة الاتصال بالإنترنت", "success");
+            this.fetchFreshDataWithRetry();
+            this.showToast('تم استعادة الاتصال بالإنترنت', 'success');
         });
         window.addEventListener('offline', () => {
             this.isOnline = false;
             if (!this.fullData) this.showOfflinePage();
-            this.showToast("انقطع الاتصال بالإنترنت", "warning");
+            this.showToast('انقطع الاتصال بالإنترنت', 'warning');
         });
     }
     
@@ -261,11 +288,11 @@ class App {
             });
             if (clearCacheBtn) {
                 clearCacheBtn.addEventListener('click', async () => {
-                    if (confirm('⚠️ سيتم مسح جميع الصور والبيانات المخزنة. هل أنت متأكد؟')) {
+                    if (confirm('سيتم مسح جميع الصور والبيانات المخزنة. هل أنت متأكد؟')) {
                         await this.storage.clearAllCache();
-                        // مسح سلة المشتريات أيضاً
+                        // مسح سلة التسوق أيضاً
                         localStorage.removeItem(CONFIG.STORAGE_KEYS.CART);
-                        this.showToast("تم مسح الكاش، سيتم إعادة تحميل البيانات", "info");
+                        this.showToast('تم مسح الكاش، سيتم إعادة تحميل البيانات', 'info');
                         setTimeout(() => location.reload(), 1000);
                     }
                 });
@@ -273,17 +300,7 @@ class App {
         }
     }
     
-    showWelcomeMessage() {
-        const isFirstVisit = !localStorage.getItem('togven_visited');
-        if (isFirstVisit) {
-            setTimeout(() => {
-                this.showToast("مرحباً بك في توجفن! 🛍️ أضف منتجاتك إلى السلة', 'info");
-                localStorage.setItem('togven_visited', 'true');
-            }, 1000);
-        }
-    }
-    
-    showToast(message, type = "info") {
+    showToast(message, type = 'info') {
         let toast = document.getElementById('dynamicToast');
         if (!toast) {
             toast = document.createElement('div');
@@ -299,7 +316,7 @@ class App {
     }
 }
 
-// تشغيل التطبيق عند تحميل الصفحة
+// تشغيل التطبيق
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => new App());
 } else {
