@@ -1,11 +1,11 @@
-import { CONFIG } from './config.js';
+import { CONFIG, escapeHtml } from './config.js';
 import { ProductCard } from './ProductCard.js';
 
 export class ProductsGrid {
     constructor(containerId, storage, cartManager, onGlobalQuantityChange) {
         this.container = document.getElementById(containerId);
         this.storage = storage;
-        this.cartManager = cartManager;       // المصدر الوحيد للسلة
+        this.cartManager = cartManager;
         this.onGlobalQuantityChange = onGlobalQuantityChange;
         this.rawData = null;
         this.mainCategories = new Set();
@@ -17,10 +17,10 @@ export class ProductsGrid {
         this.currentPageMap = new Map();
         this.loadMoreButtons = new Map();
         this.allSectionsList = [];
-        this.visibleSectionsCount = 6;
-        this.sectionsPerLoad = 6;
+        this.visibleSectionsCount = CONFIG.SECTIONS_PER_LOAD || 6;
+        this.sectionsPerLoad = CONFIG.SECTIONS_PER_LOAD || 6;
         this.sectionsLoadMoreBtn = null;
-        this.cards = [];               // { mainCat, subCat, card, element }
+        this.cards = [];
         this.imagesLoaded = 0;
         this.totalImages = 0;
         this.onImageProgress = null;
@@ -28,7 +28,7 @@ export class ProductsGrid {
         this.productsGridDiv = document.getElementById('productsGrid');
         this.isRendering = false;
         this.renderQueue = [];
-        this.batchSize = 2;
+        this.batchSize = 3;
     }
 
     setImageProgressCallback(cb) {
@@ -87,6 +87,7 @@ export class ProductsGrid {
                 }
             }
         }
+        
         if (this.searchQuery.trim()) {
             const lowerQuery = this.searchQuery.toLowerCase();
             this.allSectionsList = this.allSectionsList.filter(({ mainCat, subCat }) => {
@@ -107,14 +108,20 @@ export class ProductsGrid {
         this.imagesLoaded = 0;
         this.renderQueue = [];
 
-        const sectionsToShow = this.allSectionsList.slice(0, this.visibleSectionsCount);
+        // عند البحث، نعرض جميع الأقسام ولكن مع pagination داخلي
+        let sectionsToShow = this.allSectionsList;
+        if (!this.searchQuery.trim()) {
+            sectionsToShow = this.allSectionsList.slice(0, this.visibleSectionsCount);
+        }
+        
         for (const { mainCat, subCat } of sectionsToShow) {
             this.renderQueue.push({ mainCat, subCat });
         }
         this.processRenderQueue();
 
-        const hasMoreSections = this.allSectionsList.length > this.visibleSectionsCount;
-        if (hasMoreSections && !this.searchQuery) {
+        const hasMoreSections = !this.searchQuery.trim() && 
+                                this.allSectionsList.length > this.visibleSectionsCount;
+        if (hasMoreSections) {
             if (!this.sectionsLoadMoreBtn) {
                 this.sectionsLoadMoreBtn = document.createElement('button');
                 this.sectionsLoadMoreBtn.className = 'load-more-sections-btn';
@@ -126,11 +133,6 @@ export class ProductsGrid {
             }
         } else if (this.sectionsLoadMoreBtn) {
             this.sectionsLoadMoreBtn.style.display = 'none';
-        }
-
-        if (this.searchQuery) {
-            if (this.sectionsLoadMoreBtn) this.sectionsLoadMoreBtn.style.display = 'none';
-            this.loadMoreButtons.forEach(btn => btn && (btn.style.display = 'none'));
         }
 
         if (this.skeleton) this.skeleton.style.display = 'none';
@@ -154,11 +156,7 @@ export class ProductsGrid {
             }
         }
         if (this.renderQueue.length > 0) {
-            if (typeof requestIdleCallback !== 'undefined') {
-                requestIdleCallback(() => this.processRenderQueue(), { timeout: 100 });
-            } else {
-                setTimeout(() => this.processRenderQueue(), 10);
-            }
+            requestIdleCallback(() => this.processRenderQueue(), { timeout: 100 });
         }
     }
 
@@ -192,10 +190,6 @@ export class ProductsGrid {
             this.totalImages++;
         });
         innerDiv.appendChild(fragment);
-
-        const key = `${mainCat}|${subCat}`;
-        const btn = this.loadMoreButtons.get(key);
-        if (btn) btn.style.display = 'none';
     }
 
     renderSubCategoryPaginated(mainCat, subCat, products) {
@@ -216,6 +210,7 @@ export class ProductsGrid {
             this.productsGridDiv.appendChild(wrapper);
             sectionEl = wrapper;
         }
+        
         const key = `${mainCat}|${subCat}`;
         const currentPage = this.currentPageMap.get(key) || 0;
         const start = currentPage * CONFIG.ITEMS_PER_PAGE;
@@ -256,7 +251,7 @@ export class ProductsGrid {
         const card = new ProductCard(
             product,
             this.storage,
-            (name, newQty, delta) => {
+            (name, newQty) => {
                 this.cartManager.updateItem(name, newQty, product.price, product.imageUrl);
                 if (this.onGlobalQuantityChange) {
                     this.onGlobalQuantityChange(this.cartManager.totalQuantity, this.cartManager.totalPrice);
@@ -289,6 +284,19 @@ export class ProductsGrid {
         }
     }
 
+    // ⭐ إصلاح المشكلة الحرجة: إزالة التكرار في استدعاء cartManager.removeItem
+    removeItemFromCart(productName) {
+        // فقط نقوم بتحديث واجهة المنتج، الحذف الفعلي تم عبر الـ callback
+        const cardObj = this.cards.find(c => c.card.getProduct().name === productName);
+        if (cardObj && cardObj.card.getQuantity() > 0) {
+            cardObj.card.setQuantity(0);
+        }
+        if (this.onGlobalQuantityChange) {
+            this.onGlobalQuantityChange(this.cartManager.totalQuantity, this.cartManager.totalPrice);
+        }
+        return true;
+    }
+
     loadMoreSections() {
         this.visibleSectionsCount += this.sectionsPerLoad;
         this.renderVisibleSections();
@@ -297,7 +305,7 @@ export class ProductsGrid {
     setActiveMainCategory(cat) {
         this.activeMain = cat;
         this.activeSub = null;
-        this.visibleSectionsCount = 6;
+        this.visibleSectionsCount = this.sectionsPerLoad;
         this.buildAllSectionsList();
         this.resetAllPages();
         this.renderVisibleSections();
@@ -305,7 +313,7 @@ export class ProductsGrid {
 
     setActiveSubCategory(sub) {
         this.activeSub = (sub === 'all') ? null : sub;
-        this.visibleSectionsCount = 6;
+        this.visibleSectionsCount = this.sectionsPerLoad;
         this.buildAllSectionsList();
         this.resetAllPages();
         this.renderVisibleSections();
@@ -313,11 +321,8 @@ export class ProductsGrid {
 
     filterBySearch(query) {
         this.searchQuery = query;
-        this.visibleSectionsCount = 6;
+        this.visibleSectionsCount = this.sectionsPerLoad;
         this.buildAllSectionsList();
-        if (this.searchQuery.trim() !== '') {
-            this.visibleSectionsCount = this.allSectionsList.length;
-        }
         this.resetAllPages();
         this.renderVisibleSections();
         return this.cards.length;
@@ -358,29 +363,7 @@ export class ProductsGrid {
         return this.cartManager.getCartItems();
     }
 
-    removeItemFromCart(productName) {
-        this.cartManager.removeItem(productName);
-        const cardObj = this.cards.find(c => c.card.getProduct().name === productName);
-        if (cardObj && cardObj.card.getQuantity() > 0) {
-            cardObj.card.setQuantity(0);
-        }
-        if (this.onGlobalQuantityChange) {
-            this.onGlobalQuantityChange(this.cartManager.totalQuantity, this.cartManager.totalPrice);
-        }
-        return true;
-    }
-
     getTotalCartQuantity() {
         return this.cartManager.totalQuantity;
     }
-}
-
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/[&<>]/g, function(m) {
-        if (m === '&') return '&amp;';
-        if (m === '<') return '&lt;';
-        if (m === '>') return '&gt;';
-        return m;
-    });
 }
