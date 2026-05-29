@@ -4,7 +4,7 @@ export class ProductCard {
     constructor(product, storage, onQuantityChange, initialQty = 0) {
         this.product = product;
         this.storage = storage;
-        this.onQuantityChange = onQuantityChange; // (productName, newQuantity, delta)
+        this.onQuantityChange = onQuantityChange;
         this.quantity = initialQty;
         this.element = null;
         this.qtyInput = null;
@@ -29,7 +29,8 @@ export class ProductCard {
         card.innerHTML = `
             <img class="product-img" id="${uniqueId}" 
                  src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%23f0f0f0'/%3E%3Ctext x='100' y='110' text-anchor='middle' fill='%23999' font-size='14'%3Eتحميل...%3C/text%3E%3C/svg%3E" 
-                 alt="${escapeHtml(this.product.name)}">
+                 alt="${escapeHtml(this.product.name)}"
+                 loading="lazy">
             <div class="product-info">
                 <div class="product-name">${escapeHtml(this.product.name)}</div>
                 <div class="product-price">${this.product.price.toLocaleString()} ل.س</div>
@@ -48,7 +49,6 @@ export class ProductCard {
         this.subtotalRow = card.querySelector('.item-subtotal');
         this.imageElement = card.querySelector(`#${uniqueId}`);
 
-        // أزرار الكمية (تم تبديل الألوان في CSS)
         const incBtn = card.querySelector('.inc-qty');
         const decBtn = card.querySelector('.dec-qty');
         
@@ -61,7 +61,6 @@ export class ProductCard {
             this.changeQuantity(-1);
         });
 
-        // تغيير مباشر من input
         this.qtyInput.addEventListener('change', (e) => {
             let newVal = parseInt(e.target.value);
             if (isNaN(newVal)) newVal = 0;
@@ -78,7 +77,6 @@ export class ProductCard {
             this.qtyInput.value = this.quantity;
         });
 
-        // تحميل الصورة
         this.loadImage();
         this.updateUI();
         return card;
@@ -92,7 +90,7 @@ export class ProductCard {
             return;
         }
 
-        // محاولة الحصول من الكاش (IndexedDB أو localStorage)
+        // محاولة الحصول من الكاش
         let cachedBlob = null;
         try {
             cachedBlob = await this.storage.getImageBlob(imageUrl);
@@ -111,7 +109,7 @@ export class ProductCard {
             return;
         }
 
-        // إذا لم يكن في الكاش، نحاول التحميل مباشرة (مع إمكانية التخزين)
+        // تحميل مباشر مع تخزين
         this.loadImageDirect();
     }
 
@@ -122,7 +120,6 @@ export class ProductCard {
             return;
         }
 
-        // نستخدم fetch أولاً لمحاولة التخزين المؤقت
         try {
             const res = await fetch(imageUrl, { mode: 'cors' });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -136,8 +133,7 @@ export class ProductCard {
                 this.setPlaceholderImage();
             };
         } catch (err) {
-            console.warn(`فشل تحميل الصورة عبر fetch: ${imageUrl}`, err);
-            // محاولة مباشرة باستخدام src (قد تعمل إذا كانت الصورة متاحة وCORS ليست مشكلة)
+            console.warn(`فشل تحميل الصورة: ${imageUrl}`, err);
             this.imageElement.src = imageUrl;
             this.imageElement.onerror = () => {
                 this.setPlaceholderImage();
