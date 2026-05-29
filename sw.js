@@ -1,9 +1,8 @@
-// ==================== Service Worker لتطبيق توجفن – الإصدار المحسن للشبكة ====================
-const CACHE_NAME = 'togven-v3.0.1';
+// ==================== Service Worker لتطبيق توجفن – الإصدار المحسن ====================
+const CACHE_NAME = 'togven-v3.0.2';
 const API_CACHE_NAME = 'togven-api-v2';
 const STATIC_CACHE_NAME = 'togven-static-v1';
 
-// استخدام مسارات نسبية للتوافق مع النشر في أي مجلد
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -24,7 +23,7 @@ const PRECACHE_URLS = [
 
 // تثبيت الـ SW
 self.addEventListener('install', event => {
-  console.log('[SW] Installing new version...');
+  console.log('[SW] Installing...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
@@ -58,12 +57,11 @@ self.addEventListener('activate', event => {
   );
 });
 
-// استراتيجية Network First للـ API (مع fallback إلى الكاش فقط عند فشل الشبكة)
+// استراتيجية Network First للـ API
 async function networkFirstAPI(request) {
   try {
     const networkResponse = await fetch(request);
     if (networkResponse && networkResponse.ok) {
-      // Clone response لتخزين نسخة في الكاش
       const responseClone = networkResponse.clone();
       const cache = await caches.open(API_CACHE_NAME);
       cache.put(request, responseClone);
@@ -76,7 +74,6 @@ async function networkFirstAPI(request) {
     if (cachedResponse) {
       return cachedResponse;
     }
-    // في حالة عدم وجود كاش، نعيد استجابة خطأ JSON
     return new Response(
       JSON.stringify({ error: 'offline', message: 'لا يوجد اتصال بالإنترنت ولا توجد نسخة مخبأة' }),
       { status: 503, headers: { 'Content-Type': 'application/json' } }
@@ -99,12 +96,11 @@ async function cacheFirstImage(request) {
     }
     return networkResponse;
   } catch (error) {
-    // صورة placeholder (يمكن استخدام بيانات فارغة)
     return new Response('', { status: 404 });
   }
 }
 
-// استراتيجية Stale While Revalidate للملفات الثابتة (CSS, JS)
+// استراتيجية Stale While Revalidate للملفات الثابتة
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(STATIC_CACHE_NAME);
   const cachedResponse = await cache.match(request);
@@ -122,7 +118,7 @@ async function staleWhileRevalidate(request) {
   return cachedResponse || fetchPromise;
 }
 
-// استراتيجية خاصة بصفحات HTML (مع fallback إلى offline.html)
+// استراتيجية خاصة بصفحات HTML
 async function handleHTMLRequest(request) {
   try {
     const networkResponse = await fetch(request);
@@ -137,7 +133,6 @@ async function handleHTMLRequest(request) {
     if (cachedResponse) {
       return cachedResponse;
     }
-    // عرض صفحة الأوفلاين المخصصة
     const offlinePage = await caches.match('./offline.html');
     return offlinePage || new Response('غير متصل بالإنترنت', { status: 503 });
   }
@@ -148,13 +143,11 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   const url = new URL(request.url);
   
-  // تخطي الطلبات إلى chrome-extension أو غيرها
   if (url.protocol === 'chrome-extension:' || url.protocol === 'moz-extension:') {
     return;
   }
   
-  // ========== API (Google Scripts) ==========
-  // يجب أن يمر أي طلب إلى script.google.com أو يحتوي على 'exec' عبر networkFirstAPI
+  // API
   if (url.href.includes('script.google.com') || 
       url.href.includes('googleapis.com') ||
       url.href.includes('exec') ||
@@ -163,20 +156,20 @@ self.addEventListener('fetch', event => {
     return;
   }
   
-  // ========== الصور ==========
+  // الصور
   if (request.destination === 'image') {
     event.respondWith(cacheFirstImage(request));
     return;
   }
   
-  // ========== HTML (صفحات) ==========
+  // HTML
   if (request.destination === 'document' || 
       request.headers.get('accept')?.includes('text/html')) {
     event.respondWith(handleHTMLRequest(request));
     return;
   }
   
-  // ========== الملفات الثابتة (CSS, JS, Fonts, Manifest) ==========
+  // الملفات الثابتة
   if (request.destination === 'style' || 
       request.destination === 'script' ||
       request.destination === 'font' ||
@@ -185,8 +178,7 @@ self.addEventListener('fetch', event => {
     return;
   }
   
-  // ========== باقي الطلبات (مثل fetch عادي) ==========
-  // استراتيجية Cache First ثم Network للملفات الأخرى
+  // باقي الطلبات
   event.respondWith(
     caches.match(request).then(cachedResponse => {
       if (cachedResponse) {
@@ -200,15 +192,12 @@ self.addEventListener('fetch', event => {
           });
         }
         return networkResponse;
-      }).catch(error => {
-        console.log('[SW] Fetch failed for:', request.url, error);
-        return new Response('Network error', { status: 503 });
-      });
+      }).catch(() => new Response('Network error', { status: 503 }));
     })
   );
 });
 
-// الاستماع لرسائل من الصفحة الرئيسية (لإدارة الكاش)
+// الاستماع لرسائل من الصفحة الرئيسية
 self.addEventListener('message', event => {
   const data = event.data;
   
@@ -219,12 +208,11 @@ self.addEventListener('message', event => {
       caches.delete(API_CACHE_NAME),
       caches.delete(STATIC_CACHE_NAME)
     ]).then(() => {
-      console.log('[SW] Caches cleared successfully');
+      console.log('[SW] Caches cleared');
       if (event.ports && event.ports[0]) {
         event.ports[0].postMessage({ success: true });
       }
     }).catch(err => {
-      console.error('[SW] Error clearing caches:', err);
       if (event.ports && event.ports[0]) {
         event.ports[0].postMessage({ success: false, error: err.message });
       }
@@ -240,13 +228,9 @@ self.addEventListener('message', event => {
   }
 });
 
-// دعم Background Sync (اختياري للمزامنة المستقبلية)
+// دعم Background Sync
 self.addEventListener('sync', event => {
   if (event.tag === 'sync-cart') {
-    console.log('[SW] Background sync for cart');
-    event.waitUntil(
-      // يمكن تنفيذ مزامنة الطلبات المعلقة هنا
-      Promise.resolve()
-    );
+    event.waitUntil(Promise.resolve());
   }
 });
