@@ -18,22 +18,28 @@ class App {
     }
 
     async init() {
+        // تهيئة التخزين أولاً
         this.storage = new StorageService();
         await this.storage.init();
         
+        // تنظيف الكاش القديم في الخلفية (اختياري)
+        this.storage.cleanOldCache().catch(console.warn);
+        
+        // تهيئة مدير الثيم
         this.themeManager = new ThemeManager();
         
-        // CartManager أولاً
+        // تهيئة مدير السلة
         this.cartManager = new CartManager(CONFIG.TARGET_NUMBER, (qty, total) => {
             this.updateCartUI(qty, total);
         });
         
-        // ProductsGrid مع cartManager
+        // تهيئة شبكة المنتجات
         this.productsGrid = new ProductsGrid('productsGrid', this.storage, this.cartManager, (totalQty, totalPrice) => {
             this.updateCartUI(totalQty, totalPrice);
-            this.refreshCartDrawer(); // تحديث الدراور عند تغير السلة
+            this.refreshCartDrawer();
         });
         
+        // تهيئة مدير التصنيفات
         this.categoryManager = new CategoryManager(
             'mainChipsContainer',
             'subChipsContainer',
@@ -51,60 +57,187 @@ class App {
             }
         );
         
+        // تعيين回调 لإزالة المنتج من السلة
         this.cartManager.setRemoveItemCallback((productName) => {
             this.productsGrid.removeItemFromCart(productName);
             this.refreshCartDrawer();
         });
         
-        // شريط التقدم
-        const progressBar = document.getElementById('globalProgress');
-        const progressFill = progressBar?.querySelector('.progress-fill');
-        if (progressBar && progressFill) {
-            this.productsGrid.setImageProgressCallback((percent) => {
-                if (percent < 100 && percent > 0) {
-                    progressBar.style.display = 'block';
-                    progressFill.style.width = `${percent}%`;
-                } else {
-                    setTimeout(() => progressBar.style.display = 'none', 500);
-                }
-            });
-        }
+        // إعداد شريط التقدم
+        this.setupProgressBar();
         
-        // البحث
+        // إعداد البحث
         this.setupSearch();
         
-        // عرض بيانات مخزنة مؤقتاً
-        const skeleton = document.getElementById('skeletonLoader');
-        const productsGridDiv = document.getElementById('productsGrid');
-        const cachedData = await this.storage.getApiCache();
-        if (cachedData && Object.keys(cachedData).length > 0) {
-            console.log('[App] Using cached data');
-            this.renderFullData(cachedData);
-            const timestamp = await this.storage.getLastUpdateTimestamp();
-            this.showOfflineToast(true, timestamp);
-            if (skeleton) skeleton.style.display = 'none';
-            if (productsGridDiv) productsGridDiv.style.display = 'grid';
-        } else {
-            console.log('[App] No valid cache found');
-        }
+        // عرض البيانات المخزنة مؤقتاً أولاً (تجربة سريعة)
+        await this.loadCachedDataAndDisplay();
         
+        // محاولة جلب بيانات جديدة من الشبكة
         await this.fetchFreshDataWithRetry();
         
+        // إعداد المستمعات والإضافات
         this.setupNetworkListeners();
         this.setupSettingsModal();
-        this.setupCartDrawer();   // إضافة ربط الدراور
+        this.setupCartDrawer();
         
-        // تحديث واجهة السلة
+        // تحديث واجهة السلة بعد التحميل
         setTimeout(() => {
             this.updateCartUI(this.cartManager.totalQuantity, this.cartManager.totalPrice);
             this.refreshCartDrawer();
         }, 500);
     }
     
+    // ========== شريط التقدم ==========
+    setupProgressBar() {
+        const progressBar = document.getElementById('globalProgress');
+        const progressFill = progressBar?.querySelector('.progress-fill');
+        if (progressBar && progressFill && this.productsGrid) {
+            this.productsGrid.setImageProgressCallback((percent) => {
+                if (percent < 100 && percent > 0) {
+                    progressBar.style.display = 'block';
+                    progressFill.style.width = `${percent}%`;
+                } else {
+                    setTimeout(() => {
+                        if (progressBar) progressBar.style.display = 'none';
+                    }, 500);
+                }
+            });
+        }
+    }
+    
+    // ========== عرض البيانات المخزنة مؤقتاً ==========
+    async loadCachedDataAndDisplay() {
+        const skeleton = document.getElementById('skeletonLoader');
+        const productsGridDiv = document.getElementById('productsGrid');
+        
+        try {
+            const cachedData = await this.storage.getApiCache();
+            if (cachedData && Object.keys(cachedData).length > 0) {
+                console.log('[App] Using cached data');
+                this.renderFullData(cachedData);
+                const timestamp = await this.storage.getLastUpdateTimestamp();
+                this.showOfflineToast(true, timestamp);
+                if (skeleton) skeleton.style.display = 'none';
+                if (productsGridDiv) productsGridDiv.style.display = 'grid';
+                return true;
+            } else {
+                console.log('[App] No valid cache found');
+                return false;
+            }
+        } catch (err) {
+            console.error('[App] Error loading cache:', err);
+            return false;
+        }
+    }
+    
+    // ========== جلب بيانات جديدة مع إعادة المحاولة ==========
+    async fetchFreshDataWithRetry(retries = CONFIG.FETCH_RETRY_COUNT) {
+        for (let i = 0; i < retries; i++) {
+            try {
+                await this.fetchFreshData();
+                return true;
+            } catch (err) {
+                console.warn(`[App] Fetch attempt ${i+1}/${retries} failed:`, err.message);
+                if (i === retries - 1) {
+                    // فشلت كل المحاولات
+                    if (!this.fullData) {
+                        this.showOfflinePage();
+                    } else {
+                        this.showOfflineToast(true, await this.storage.getLastUpdateTimestamp());
+                    }
+                    this.showToast('فشل تحميل البيانات من الخادم، يتم عرض نسخة مخزنة', 'error');
+                } else {
+                    // انتظار قبل إعادة المحاولة (تأخير تصاعدي)
+                    await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+                }
+            }
+        }
+        return false;
+    }
+    
+    // ========== جلب البيانات من الشبكة ==========
+    async fetchFreshData() {
+        console.log('[App] Fetching fresh data from', CONFIG.API_URL);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), CONFIG.FETCH_TIMEOUT);
+        
+        try {
+            const response = await fetch(CONFIG.API_URL, { 
+                signal: controller.signal,
+                headers: { 
+                    'Accept': 'application/json',
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            // التحقق من صحة البيانات
+            if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+                throw new Error('Invalid or empty data format');
+            }
+            
+            // حفظ البيانات في الكاش
+            await this.storage.saveApiCache(data);
+            
+            // عرض البيانات
+            this.renderFullData(data);
+            
+            // إخفاء رسائل الأوفلاين
+            this.showOfflineToast(false);
+            this.hideOfflinePage();
+            
+            // إشعار نجاح (اختياري)
+            this.showToast('تم تحديث البيانات بنجاح', 'success');
+            
+        } catch (err) {
+            clearTimeout(timeoutId);
+            console.error('[App] Fetch error:', err);
+            throw err;
+        }
+    }
+    
+    // ========== عرض البيانات في الواجهة ==========
+    renderFullData(data) {
+        this.fullData = data;
+        this.productsGrid.loadData(data);
+        
+        // تحديث التصنيفات الرئيسية
+        const mainCats = this.productsGrid.getMainCategories();
+        this.categoryManager.buildMainChips(mainCats);
+        
+        // تحديث خريطة التصنيفات الفرعية
+        const subMap = new Map();
+        for (const main of mainCats) {
+            subMap.set(main, this.productsGrid.getSubCategoriesFor(main));
+        }
+        this.categoryManager.setSubCategoriesMap(subMap);
+        
+        // استعادة التصنيف النشط إن وجد
+        const currentMain = this.categoryManager.getCurrentMain();
+        if (currentMain && currentMain !== 'all') {
+            this.categoryManager.selectMainCategory(currentMain);
+        }
+        
+        // إخفاء السكلتون وإظهار الشبكة
+        const skeleton = document.getElementById('skeletonLoader');
+        const gridDiv = document.getElementById('productsGrid');
+        if (skeleton) skeleton.style.display = 'none';
+        if (gridDiv) gridDiv.style.display = 'grid';
+    }
+    
+    // ========== البحث ==========
     setupSearch() {
         const searchInput = document.getElementById('searchInput');
         const clearSearch = document.getElementById('clearSearch');
         const searchStats = document.getElementById('searchStats');
+        
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
                 const query = e.target.value;
@@ -112,9 +245,12 @@ class App {
                 if (searchStats) {
                     searchStats.innerText = query.trim() ? `${count} نتيجة` : '';
                 }
-                if (clearSearch) clearSearch.style.display = query ? 'flex' : 'none';
+                if (clearSearch) {
+                    clearSearch.style.display = query ? 'flex' : 'none';
+                }
             });
         }
+        
         if (clearSearch) {
             clearSearch.addEventListener('click', () => {
                 if (searchInput) searchInput.value = '';
@@ -125,6 +261,7 @@ class App {
         }
     }
     
+    // ========== دراور السلة ==========
     setupCartDrawer() {
         const drawer = document.getElementById('cartDrawer');
         const overlay = document.getElementById('cartOverlay');
@@ -139,10 +276,12 @@ class App {
                 overlay?.classList.add('open');
             });
         }
+        
         const closeDrawer = () => {
             drawer?.classList.remove('open');
             overlay?.classList.remove('open');
         };
+        
         if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
         if (overlay) overlay.addEventListener('click', closeDrawer);
         if (whatsappBtn) {
@@ -190,20 +329,24 @@ class App {
                 </div>
             `;
         }).join('');
+        
         drawerBody.innerHTML = html;
         if (drawerTotalSpan) drawerTotalSpan.innerText = total.toLocaleString();
         
-        // إضافة أحداث الأزرار
+        // ربط أحداث الأزرار
         drawerBody.querySelectorAll('.cart-qty-dec').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const name = btn.getAttribute('data-name');
                 const current = this.cartManager.getItemQuantity(name);
-                if (current > 0) this.cartManager.updateItem(name, current - 1, null, null);
-                this.refreshCartDrawer();
-                this.productsGrid.updateProductQuantity(name, current - 1);
-                this.updateCartUI(this.cartManager.totalQuantity, this.cartManager.totalPrice);
+                if (current > 0) {
+                    this.cartManager.updateItem(name, current - 1, null, null);
+                    this.refreshCartDrawer();
+                    this.productsGrid.updateProductQuantity(name, current - 1);
+                    this.updateCartUI(this.cartManager.totalQuantity, this.cartManager.totalPrice);
+                }
             });
         });
+        
         drawerBody.querySelectorAll('.cart-qty-inc').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const name = btn.getAttribute('data-name');
@@ -214,6 +357,7 @@ class App {
                 this.updateCartUI(this.cartManager.totalQuantity, this.cartManager.totalPrice);
             });
         });
+        
         drawerBody.querySelectorAll('.remove-item').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const name = btn.getAttribute('data-name');
@@ -228,8 +372,10 @@ class App {
     updateCartUI(totalQty, totalPrice) {
         const badge = document.getElementById('cartBadge');
         if (badge) badge.innerText = totalQty.toString();
+        
         const grandTotalSpan = document.getElementById('grandTotal');
         if (grandTotalSpan) grandTotalSpan.innerText = totalPrice.toLocaleString();
+        
         const footer = document.querySelector('.cart-floating-footer');
         if (footer) {
             if (totalQty > 0) footer.classList.add('show');
@@ -243,6 +389,7 @@ class App {
             this.showToast('السلة فارغة', 'warning');
             return;
         }
+        
         let message = "🛍️ طلب جديد:\n";
         let total = 0;
         items.forEach(item => {
@@ -250,77 +397,16 @@ class App {
             total += item.quantity * item.price;
         });
         message += `\n💰 الإجمالي: ${total.toLocaleString()} ل.س`;
+        
         const url = `https://wa.me/${CONFIG.TARGET_NUMBER}?text=${encodeURIComponent(message)}`;
         window.open(url, '_blank');
     }
     
-    async fetchFreshDataWithRetry(retries = CONFIG.FETCH_RETRY_COUNT) {
-        for (let i = 0; i < retries; i++) {
-            try {
-                await this.fetchFreshData();
-                return;
-            } catch (err) {
-                console.warn(`[App] Fetch attempt ${i+1} failed:`, err);
-                if (i === retries - 1) {
-                    if (!this.fullData) this.showOfflinePage();
-                    else this.showOfflineToast(true, await this.storage.getLastUpdateTimestamp());
-                    this.showToast('فشل تحميل البيانات من الخادم', 'error');
-                } else {
-                    await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-                }
-            }
-        }
-    }
-    
-    async fetchFreshData() {
-        console.log('[App] Fetching fresh data from', CONFIG.API_URL);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), CONFIG.FETCH_TIMEOUT);
-        try {
-            const response = await fetch(CONFIG.API_URL, { 
-                signal: controller.signal,
-                headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' }
-            });
-            clearTimeout(timeoutId);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
-            if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
-                throw new Error('Invalid data format');
-            }
-            await this.storage.saveApiCache(data);
-            this.renderFullData(data);
-            this.showOfflineToast(false);
-            this.hideOfflinePage();
-            this.showToast('تم تحديث البيانات بنجاح', 'success');
-        } catch (err) {
-            clearTimeout(timeoutId);
-            throw err;
-        }
-    }
-    
-    renderFullData(data) {
-        this.fullData = data;
-        this.productsGrid.loadData(data);
-        const mainCats = this.productsGrid.getMainCategories();
-        this.categoryManager.buildMainChips(mainCats);
-        const subMap = new Map();
-        for (const main of mainCats) {
-            subMap.set(main, this.productsGrid.getSubCategoriesFor(main));
-        }
-        this.categoryManager.setSubCategoriesMap(subMap);
-        const currentMain = this.categoryManager.getCurrentMain();
-        if (currentMain && currentMain !== 'all') {
-            this.categoryManager.selectMainCategory(currentMain);
-        }
-        const skeleton = document.getElementById('skeletonLoader');
-        const gridDiv = document.getElementById('productsGrid');
-        if (skeleton) skeleton.style.display = 'none';
-        if (gridDiv) gridDiv.style.display = 'grid';
-    }
-    
-    async showOfflineToast(isCached, timestamp) {
+    // ========== إدارة وضع الأوفلاين ==========
+    showOfflineToast(isCached, timestamp) {
         const toast = document.getElementById('offlineToast');
         if (!toast) return;
+        
         if (isCached) {
             toast.style.display = 'flex';
             const timeSpan = document.getElementById('cacheTime');
@@ -330,8 +416,11 @@ class App {
             const refreshBtn = document.getElementById('refreshDataBtn');
             if (refreshBtn) {
                 refreshBtn.onclick = () => {
-                    if (navigator.onLine) this.fetchFreshDataWithRetry();
-                    else this.showToast('لا يوجد اتصال بالإنترنت', 'warning');
+                    if (navigator.onLine) {
+                        this.fetchFreshDataWithRetry();
+                    } else {
+                        this.showToast('لا يوجد اتصال بالإنترنت', 'warning');
+                    }
                 };
             }
             const closeToast = document.getElementById('closeToastBtn');
@@ -344,6 +433,7 @@ class App {
     showOfflinePage() {
         const offlinePage = document.getElementById('offlinePage');
         if (offlinePage) offlinePage.style.display = 'flex';
+        
         const retryBtn = document.getElementById('retryConnection');
         if (retryBtn) {
             retryBtn.onclick = () => {
@@ -369,6 +459,7 @@ class App {
             this.fetchFreshDataWithRetry();
             this.showToast('تم استعادة الاتصال بالإنترنت', 'success');
         });
+        
         window.addEventListener('offline', () => {
             this.isOnline = false;
             if (!this.fullData) this.showOfflinePage();
@@ -376,17 +467,20 @@ class App {
         });
     }
     
+    // ========== مودال الإعدادات ==========
     setupSettingsModal() {
         const settingsBtn = document.getElementById('settingsBtn');
         const modal = document.getElementById('settingsModal');
         const closeBtn = modal?.querySelector('.modal-close');
         const clearCacheBtn = document.getElementById('clearCacheAction');
+        
         if (settingsBtn && modal) {
             settingsBtn.addEventListener('click', () => modal.classList.add('open'));
             if (closeBtn) closeBtn.addEventListener('click', () => modal.classList.remove('open'));
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) modal.classList.remove('open');
             });
+            
             if (clearCacheBtn) {
                 clearCacheBtn.addEventListener('click', async () => {
                     if (confirm('سيتم مسح جميع الصور والبيانات المخزنة. هل أنت متأكد؟')) {
@@ -414,6 +508,7 @@ class App {
     }
 }
 
+// دالة مساعدة لتشفير النص
 function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/[&<>]/g, function(m) {
@@ -424,6 +519,7 @@ function escapeHtml(str) {
     });
 }
 
+// بدء التطبيق عند تحميل الصفحة
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => new App());
 } else {
