@@ -6,14 +6,17 @@ export const CONFIG = {
     // رابط API الرئيسي (Google Sheets)
     API_URL: "https://script.google.com/macros/s/AKfycbwrXoE1tAYJb6D19UM9M-FSUDE9AMd73cj0u35bL7tyG902QN0B6nuDFisNQfgEwELq/exec",
     
+    // رابط API احتياطي (يمكنك تغييره إلى رابط آخر يعمل)
+    FALLBACK_API_URL: "https://api.npoint.io/your-fallback-data", // ضع رابط JSON بديل هنا
+    
     // إعدادات العرض
     ITEMS_PER_PAGE: 12,
     SECTIONS_PER_LOAD: 6,
     
     // إعدادات الكاش والتخزين
-    CACHE_TTL: 3600000,        // 1 hour
+    CACHE_TTL: 3600000,
     DB_NAME: "TogvenDB",
-    DB_VERSION: 6,              // تمت الترقية لتجنب تعارض الكاش القديم
+    DB_VERSION: 6,
     STORES: {
         IMAGES: "images",
         API_CACHE: "apiCache"
@@ -21,8 +24,8 @@ export const CONFIG = {
     
     // إعدادات الشبكة
     DEBOUNCE_DELAY: 150,
-    FETCH_RETRY_COUNT: 3,
-    FETCH_TIMEOUT: 15000,
+    FETCH_RETRY_COUNT: 2,           // عدد المحاولات لكل رابط
+    FETCH_TIMEOUT: 20000,           // 20 ثانية (زيادة المهلة)
     
     // الثيم الافتراضي
     DEFAULT_THEME: "light",
@@ -65,7 +68,7 @@ export function formatCurrency(amount) {
     return amount.toLocaleString("ar-EG") + " ل.س";
 }
 
-// ترميز النص لـ HTML (دالة موحدة)
+// ترميز النص لـ HTML
 export function escapeHtml(str) {
     if (!str) return "";
     return str
