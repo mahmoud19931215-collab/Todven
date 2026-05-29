@@ -171,9 +171,6 @@ export class StorageService {
                 const { timestamp } = JSON.parse(cached);
                 return timestamp;
             }
-        } else {
-            // يمكن قراءة من IndexedDB بشكل غير متزامن، لكن نعيد null للبساطة.
-            return null;
         }
         return null;
     }
