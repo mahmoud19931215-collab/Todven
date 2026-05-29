@@ -2,9 +2,10 @@ import { CONFIG } from './config.js';
 import { ProductCard } from './ProductCard.js';
 
 export class ProductsGrid {
-    constructor(containerId, storage, onGlobalQuantityChange) {
+    constructor(containerId, storage, cartManager, onGlobalQuantityChange) {
         this.container = document.getElementById(containerId);
         this.storage = storage;
+        this.cartManager = cartManager;       // المصدر الوحيد للسلة
         this.onGlobalQuantityChange = onGlobalQuantityChange;
         this.rawData = null;
         this.mainCategories = new Set();
@@ -19,15 +20,15 @@ export class ProductsGrid {
         this.visibleSectionsCount = 6;
         this.sectionsPerLoad = 6;
         this.sectionsLoadMoreBtn = null;
-        this.cards = [];
+        this.cards = [];               // { mainCat, subCat, card, element }
         this.imagesLoaded = 0;
         this.totalImages = 0;
         this.onImageProgress = null;
         this.skeleton = document.getElementById('skeletonLoader');
         this.productsGridDiv = document.getElementById('productsGrid');
         this.isRendering = false;
-        this.renderQueue = [];      // قائمة انتظار للتصنيفات التي لم ترسم بعد
-        this.batchSize = 2;         // عدد التصنيفات التي ترسم دفعة واحدة (تحسين الأداء)
+        this.renderQueue = [];
+        this.batchSize = 2;
     }
 
     setImageProgressCallback(cb) {
@@ -45,7 +46,6 @@ export class ProductsGrid {
     loadData(data) {
         this.rawData = data;
         this.clear();
-        // بناء الخرائط بشكل أسرع باستخدام for...of
         for (const [mainCat, subCatsObj] of Object.entries(data)) {
             this.mainCategories.add(mainCat);
             const subSet = new Set();
@@ -53,8 +53,10 @@ export class ProductsGrid {
                 subSet.add(subCat);
                 const validProducts = products.map(p => ({
                     ...p,
-                    imageUrl: p.imageUrl?.startsWith('http') ? p.imageUrl : 'https://via.placeholder.com/300?text=No+Image',
-                    stock: p.stock !== undefined ? p.stock : 999
+                    name: p.name || p.title || 'منتج بدون اسم',
+                    price: parseFloat(p.price) || 0,
+                    stock: p.stock !== undefined ? p.stock : 999,
+                    imageUrl: (p.imageUrl && p.imageUrl.startsWith('http')) ? p.imageUrl : null
                 }));
                 const key = `${mainCat}|${subCat}`;
                 this.productsMap.set(key, validProducts);
@@ -85,6 +87,14 @@ export class ProductsGrid {
                 }
             }
         }
+        if (this.searchQuery.trim()) {
+            const lowerQuery = this.searchQuery.toLowerCase();
+            this.allSectionsList = this.allSectionsList.filter(({ mainCat, subCat }) => {
+                const key = `${mainCat}|${subCat}`;
+                const products = this.productsMap.get(key) || [];
+                return products.some(p => p.name.toLowerCase().includes(lowerQuery));
+            });
+        }
     }
 
     renderVisibleSections() {
@@ -98,11 +108,9 @@ export class ProductsGrid {
         this.renderQueue = [];
 
         const sectionsToShow = this.allSectionsList.slice(0, this.visibleSectionsCount);
-        // إضافة جميع الأقسام إلى قائمة الانتظار
         for (const { mainCat, subCat } of sectionsToShow) {
             this.renderQueue.push({ mainCat, subCat });
         }
-        // بدء الرسم المجمع
         this.processRenderQueue();
 
         const hasMoreSections = this.allSectionsList.length > this.visibleSectionsCount;
@@ -110,11 +118,11 @@ export class ProductsGrid {
             if (!this.sectionsLoadMoreBtn) {
                 this.sectionsLoadMoreBtn = document.createElement('button');
                 this.sectionsLoadMoreBtn.className = 'load-more-sections-btn';
-                this.sectionsLoadMoreBtn.innerText = '📂 تحميل المزيد من التصنيفات';
+                this.sectionsLoadMoreBtn.innerHTML = '<i class="fas fa-layer-group"></i> تحميل المزيد من التصنيفات';
                 this.sectionsLoadMoreBtn.addEventListener('click', () => this.loadMoreSections());
                 this.productsGridDiv.appendChild(this.sectionsLoadMoreBtn);
             } else {
-                this.sectionsLoadMoreBtn.style.display = 'block';
+                this.sectionsLoadMoreBtn.style.display = 'flex';
             }
         } else if (this.sectionsLoadMoreBtn) {
             this.sectionsLoadMoreBtn.style.display = 'none';
@@ -122,7 +130,7 @@ export class ProductsGrid {
 
         if (this.searchQuery) {
             if (this.sectionsLoadMoreBtn) this.sectionsLoadMoreBtn.style.display = 'none';
-            this.loadMoreButtons.forEach(btn => btn.style.display = 'none');
+            this.loadMoreButtons.forEach(btn => btn && (btn.style.display = 'none'));
         }
 
         if (this.skeleton) this.skeleton.style.display = 'none';
@@ -132,12 +140,11 @@ export class ProductsGrid {
 
     processRenderQueue() {
         if (this.renderQueue.length === 0) return;
-        // رسم عدد محدود من الأقسام في كل دورة لتجنب تجميد الواجهة
         const batch = this.renderQueue.splice(0, this.batchSize);
         for (const { mainCat, subCat } of batch) {
             const key = `${mainCat}|${subCat}`;
             let products = this.productsMap.get(key) || [];
-            if (this.searchQuery) {
+            if (this.searchQuery.trim()) {
                 const lowerQuery = this.searchQuery.toLowerCase();
                 products = products.filter(p => p.name.toLowerCase().includes(lowerQuery));
                 if (products.length === 0) continue;
@@ -146,25 +153,30 @@ export class ProductsGrid {
                 this.renderSubCategoryPaginated(mainCat, subCat, products);
             }
         }
-        // استخدام requestIdleCallback أو setTimeout لتفادي حظر الواجهة
         if (this.renderQueue.length > 0) {
-            requestIdleCallback ? requestIdleCallback(() => this.processRenderQueue()) : setTimeout(() => this.processRenderQueue(), 10);
+            if (typeof requestIdleCallback !== 'undefined') {
+                requestIdleCallback(() => this.processRenderQueue(), { timeout: 100 });
+            } else {
+                setTimeout(() => this.processRenderQueue(), 10);
+            }
         }
     }
 
-    loadMoreSections() {
-        this.visibleSectionsCount += this.sectionsPerLoad;
-        this.renderVisibleSections();
-    }
-
     renderSubCategoryFull(mainCat, subCat, products) {
-        const sectionId = `sec-${mainCat}-${subCat}`;
+        const sectionId = `sec-${mainCat}-${subCat}`.replace(/\s/g, '_');
         let sectionEl = document.getElementById(sectionId);
         if (!sectionEl) {
             const wrapper = document.createElement('div');
             wrapper.className = 'category-section';
             wrapper.id = sectionId;
-            wrapper.innerHTML = `<div class="category-header" data-main="${mainCat}" data-sub="${subCat}">${mainCat} <span style="font-size:14px; color:var(--primary);"> / ${subCat}</span></div><div class="products-grid-inner" id="inner-${mainCat}-${subCat}"></div>`;
+            wrapper.innerHTML = `
+                <div class="category-header">
+                    <i class="fas fa-tag"></i>
+                    <span>${escapeHtml(mainCat)}</span>
+                    ${subCat ? `<span class="sub-cat-name"> / ${escapeHtml(subCat)}</span>` : ''}
+                </div>
+                <div class="products-grid-inner" id="inner-${mainCat}-${subCat}"></div>
+            `;
             this.productsGridDiv.appendChild(wrapper);
             sectionEl = wrapper;
         }
@@ -187,13 +199,20 @@ export class ProductsGrid {
     }
 
     renderSubCategoryPaginated(mainCat, subCat, products) {
-        const sectionId = `sec-${mainCat}-${subCat}`;
+        const sectionId = `sec-${mainCat}-${subCat}`.replace(/\s/g, '_');
         let sectionEl = document.getElementById(sectionId);
         if (!sectionEl) {
             const wrapper = document.createElement('div');
             wrapper.className = 'category-section';
             wrapper.id = sectionId;
-            wrapper.innerHTML = `<div class="category-header" data-main="${mainCat}" data-sub="${subCat}">${mainCat} <span style="font-size:14px; color:var(--primary);"> / ${subCat}</span></div><div class="products-grid-inner" id="inner-${mainCat}-${subCat}"></div>`;
+            wrapper.innerHTML = `
+                <div class="category-header">
+                    <i class="fas fa-folder-open"></i>
+                    <span>${escapeHtml(mainCat)}</span>
+                    ${subCat ? `<span class="sub-cat-name"> / ${escapeHtml(subCat)}</span>` : ''}
+                </div>
+                <div class="products-grid-inner" id="inner-${mainCat}-${subCat}"></div>
+            `;
             this.productsGridDiv.appendChild(wrapper);
             sectionEl = wrapper;
         }
@@ -223,19 +242,29 @@ export class ProductsGrid {
         if (!loadBtn && hasMore) {
             loadBtn = document.createElement('button');
             loadBtn.className = 'load-more-btn';
-            loadBtn.innerText = '➕ عرض المزيد';
+            loadBtn.innerHTML = '<i class="fas fa-chevron-down"></i> عرض المزيد';
             loadBtn.addEventListener('click', () => this.renderSubCategoryPaginated(mainCat, subCat, products));
             sectionEl.appendChild(loadBtn);
             this.loadMoreButtons.set(key, loadBtn);
         } else if (loadBtn) {
-            loadBtn.style.display = hasMore ? 'block' : 'none';
+            loadBtn.style.display = hasMore ? 'flex' : 'none';
         }
     }
 
     createCardInstance(product, mainCat, subCat) {
-        const savedCart = this.getCartMapFromStorage();
-        const initialQty = savedCart[product.name] || 0;
-        const card = new ProductCard(product, this.storage, (name, newQty, delta) => this.onCardQuantityChange(name, newQty, delta), initialQty);
+        const initialQty = this.cartManager.getItemQuantity(product.name);
+        const card = new ProductCard(
+            product,
+            this.storage,
+            (name, newQty, delta) => {
+                this.cartManager.updateItem(name, newQty, product.price, product.imageUrl);
+                if (this.onGlobalQuantityChange) {
+                    this.onGlobalQuantityChange(this.cartManager.totalQuantity, this.cartManager.totalPrice);
+                }
+            },
+            initialQty,
+            this.cartManager
+        );
         const cardElement = card.render();
         const img = cardElement.querySelector('.product-img');
         if (img) {
@@ -250,32 +279,19 @@ export class ProductsGrid {
         return card;
     }
 
-    onCardQuantityChange(productName, newQty, delta) {
-        const cartMap = this.getCartMapFromStorage();
-        if (newQty === 0) delete cartMap[productName];
-        else cartMap[productName] = newQty;
-        this.saveCartMap(cartMap);
-
-        let total = 0, totalQty = 0;
-        for (let cardObj of this.cards) {
-            const qty = cardObj.card.getQuantity();
-            if (qty > 0) {
-                totalQty += qty;
-                total += qty * cardObj.card.getProduct().price;
+    updateProductQuantity(productName, newQuantity) {
+        const cardObj = this.cards.find(c => c.card.getProduct().name === productName);
+        if (cardObj && cardObj.card.getQuantity() !== newQuantity) {
+            cardObj.card.setQuantity(newQuantity);
+            if (this.onGlobalQuantityChange) {
+                this.onGlobalQuantityChange(this.cartManager.totalQuantity, this.cartManager.totalPrice);
             }
         }
-        if (this.onGlobalQuantityChange) {
-            this.onGlobalQuantityChange(totalQty, total);
-        }
     }
 
-    getCartMapFromStorage() {
-        const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.CART);
-        return saved ? JSON.parse(saved) : {};
-    }
-
-    saveCartMap(map) {
-        localStorage.setItem(CONFIG.STORAGE_KEYS.CART, JSON.stringify(map));
+    loadMoreSections() {
+        this.visibleSectionsCount += this.sectionsPerLoad;
+        this.renderVisibleSections();
     }
 
     setActiveMainCategory(cat) {
@@ -297,12 +313,10 @@ export class ProductsGrid {
 
     filterBySearch(query) {
         this.searchQuery = query;
-        if (query.trim() !== '') {
-            this.buildAllSectionsList();
+        this.visibleSectionsCount = 6;
+        this.buildAllSectionsList();
+        if (this.searchQuery.trim() !== '') {
             this.visibleSectionsCount = this.allSectionsList.length;
-        } else {
-            this.visibleSectionsCount = 6;
-            this.buildAllSectionsList();
         }
         this.resetAllPages();
         this.renderVisibleSections();
@@ -313,7 +327,7 @@ export class ProductsGrid {
         for (let key of this.currentPageMap.keys()) {
             this.currentPageMap.set(key, 0);
         }
-        this.loadMoreButtons.forEach(btn => btn.remove());
+        this.loadMoreButtons.forEach(btn => btn && btn.remove());
         this.loadMoreButtons.clear();
     }
 
@@ -341,32 +355,32 @@ export class ProductsGrid {
     }
 
     getAllCartItems() {
-        const items = [];
-        for (let cardObj of this.cards) {
-            const qty = cardObj.card.getQuantity();
-            if (qty > 0) {
-                items.push({
-                    name: cardObj.card.getProduct().name,
-                    quantity: qty,
-                    price: cardObj.card.getProduct().price
-                });
-            }
-        }
-        return items;
+        return this.cartManager.getCartItems();
     }
 
     removeItemFromCart(productName) {
+        this.cartManager.removeItem(productName);
         const cardObj = this.cards.find(c => c.card.getProduct().name === productName);
         if (cardObj && cardObj.card.getQuantity() > 0) {
-            cardObj.card.changeQuantity(-cardObj.card.getQuantity());
-            return true;
+            cardObj.card.setQuantity(0);
         }
-        return false;
+        if (this.onGlobalQuantityChange) {
+            this.onGlobalQuantityChange(this.cartManager.totalQuantity, this.cartManager.totalPrice);
+        }
+        return true;
     }
 
     getTotalCartQuantity() {
-        let total = 0;
-        for (let cardObj of this.cards) total += cardObj.card.getQuantity();
-        return total;
+        return this.cartManager.totalQuantity;
     }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
 }
