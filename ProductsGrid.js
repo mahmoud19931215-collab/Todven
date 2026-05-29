@@ -15,10 +15,9 @@ export class ProductsGrid {
         this.searchQuery = '';
         this.currentPageMap = new Map();
         this.loadMoreButtons = new Map();
-        // هيكل جديد للتحميل التدريجي للتصنيفات الفرعية
         this.allSectionsList = [];
-        this.visibleSectionsCount = 6;      // عدد الأقسام الظاهرة في البداية
-        this.sectionsPerLoad = 6;           // عدد الأقسام الإضافية عند الضغط
+        this.visibleSectionsCount = 6;
+        this.sectionsPerLoad = 6;
         this.sectionsLoadMoreBtn = null;
         this.cards = [];
         this.imagesLoaded = 0;
@@ -27,6 +26,8 @@ export class ProductsGrid {
         this.skeleton = document.getElementById('skeletonLoader');
         this.productsGridDiv = document.getElementById('productsGrid');
         this.isRendering = false;
+        this.renderQueue = [];      // قائمة انتظار للتصنيفات التي لم ترسم بعد
+        this.batchSize = 2;         // عدد التصنيفات التي ترسم دفعة واحدة (تحسين الأداء)
     }
 
     setImageProgressCallback(cb) {
@@ -44,6 +45,7 @@ export class ProductsGrid {
     loadData(data) {
         this.rawData = data;
         this.clear();
+        // بناء الخرائط بشكل أسرع باستخدام for...of
         for (const [mainCat, subCatsObj] of Object.entries(data)) {
             this.mainCategories.add(mainCat);
             const subSet = new Set();
@@ -93,20 +95,15 @@ export class ProductsGrid {
         this.cards = [];
         this.totalImages = 0;
         this.imagesLoaded = 0;
+        this.renderQueue = [];
 
         const sectionsToShow = this.allSectionsList.slice(0, this.visibleSectionsCount);
+        // إضافة جميع الأقسام إلى قائمة الانتظار
         for (const { mainCat, subCat } of sectionsToShow) {
-            const key = `${mainCat}|${subCat}`;
-            let products = this.productsMap.get(key) || [];
-            if (this.searchQuery) {
-                const lowerQuery = this.searchQuery.toLowerCase();
-                products = products.filter(p => p.name.toLowerCase().includes(lowerQuery));
-                if (products.length === 0) continue;
-                this.renderSubCategoryFull(mainCat, subCat, products);
-            } else {
-                this.renderSubCategoryPaginated(mainCat, subCat, products);
-            }
+            this.renderQueue.push({ mainCat, subCat });
         }
+        // بدء الرسم المجمع
+        this.processRenderQueue();
 
         const hasMoreSections = this.allSectionsList.length > this.visibleSectionsCount;
         if (hasMoreSections && !this.searchQuery) {
@@ -133,6 +130,28 @@ export class ProductsGrid {
         this.isRendering = false;
     }
 
+    processRenderQueue() {
+        if (this.renderQueue.length === 0) return;
+        // رسم عدد محدود من الأقسام في كل دورة لتجنب تجميد الواجهة
+        const batch = this.renderQueue.splice(0, this.batchSize);
+        for (const { mainCat, subCat } of batch) {
+            const key = `${mainCat}|${subCat}`;
+            let products = this.productsMap.get(key) || [];
+            if (this.searchQuery) {
+                const lowerQuery = this.searchQuery.toLowerCase();
+                products = products.filter(p => p.name.toLowerCase().includes(lowerQuery));
+                if (products.length === 0) continue;
+                this.renderSubCategoryFull(mainCat, subCat, products);
+            } else {
+                this.renderSubCategoryPaginated(mainCat, subCat, products);
+            }
+        }
+        // استخدام requestIdleCallback أو setTimeout لتفادي حظر الواجهة
+        if (this.renderQueue.length > 0) {
+            requestIdleCallback ? requestIdleCallback(() => this.processRenderQueue()) : setTimeout(() => this.processRenderQueue(), 10);
+        }
+    }
+
     loadMoreSections() {
         this.visibleSectionsCount += this.sectionsPerLoad;
         this.renderVisibleSections();
@@ -153,12 +172,14 @@ export class ProductsGrid {
         if (!innerDiv) return;
 
         innerDiv.innerHTML = '';
+        const fragment = document.createDocumentFragment();
         products.forEach(product => {
             const card = this.createCardInstance(product, mainCat, subCat);
-            innerDiv.appendChild(card.element);
+            fragment.appendChild(card.element);
             this.cards.push({ mainCat, subCat, card, element: card.element });
             this.totalImages++;
         });
+        innerDiv.appendChild(fragment);
 
         const key = `${mainCat}|${subCat}`;
         const btn = this.loadMoreButtons.get(key);
@@ -187,12 +208,14 @@ export class ProductsGrid {
 
         if (currentPage === 0) innerDiv.innerHTML = '';
 
+        const fragment = document.createDocumentFragment();
         pageProducts.forEach(product => {
             const card = this.createCardInstance(product, mainCat, subCat);
-            innerDiv.appendChild(card.element);
+            fragment.appendChild(card.element);
             this.cards.push({ mainCat, subCat, card, element: card.element });
             this.totalImages++;
         });
+        innerDiv.appendChild(fragment);
 
         this.currentPageMap.set(key, currentPage + 1);
         const hasMore = end < products.length;
