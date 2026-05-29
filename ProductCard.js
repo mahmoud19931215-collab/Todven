@@ -1,10 +1,11 @@
-import { escapeHtml } from './config.js';
+import { CONFIG } from './config.js';
 
 export class ProductCard {
-    constructor(product, storage, onQuantityChange, initialQty = 0) {
+    constructor(product, storage, onQuantityChange, initialQty = 0, cartManager = null) {
         this.product = product;
         this.storage = storage;
         this.onQuantityChange = onQuantityChange;
+        this.cartManager = cartManager;   // مرجع اختياري للعربة
         this.quantity = initialQty;
         this.element = null;
         this.qtyInput = null;
@@ -12,6 +13,9 @@ export class ProductCard {
         this.subtotalRow = null;
         this.debounceTimer = null;
         this.imageElement = null;
+        this.plusBtn = null;
+        this.minusBtn = null;
+        this.isUpdating = false;   // منع التحديثات المتكررة
     }
 
     render() {
@@ -23,22 +27,29 @@ export class ProductCard {
         card.setAttribute('data-stock', this.product.stock || 999);
 
         const subtotalDisplay = this.quantity > 0
-            ? `<div class="item-subtotal">المجموع: <span class="subtotal-val">${(this.quantity * this.product.price).toLocaleString()}</span> ل.س</div>`
-            : `<div class="item-subtotal" style="display: none;">المجموع: <span class="subtotal-val">0</span> ل.س</div>`;
+            ? `<div class="item-subtotal"><i class="fas fa-calculator"></i> المجموع: <span class="subtotal-val">${(this.quantity * this.product.price).toLocaleString()}</span> ل.س</div>`
+            : `<div class="item-subtotal" style="display: none;"><i class="fas fa-calculator"></i> المجموع: <span class="subtotal-val">0</span> ل.س</div>`;
+
+        const stockWarning = (this.product.stock && this.product.stock <= 5) 
+            ? `<div class="stock-warning"><i class="fas fa-exclamation-triangle"></i> متبقي ${this.product.stock} فقط</div>` 
+            : '';
 
         card.innerHTML = `
-            <img class="product-img" id="${uniqueId}" 
-                 src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%23f0f0f0'/%3E%3Ctext x='100' y='110' text-anchor='middle' fill='%23999' font-size='14'%3Eتحميل...%3C/text%3E%3C/svg%3E" 
-                 alt="${escapeHtml(this.product.name)}"
-                 loading="lazy">
+            <div class="product-img-wrapper">
+                <img class="product-img" id="${uniqueId}" 
+                     src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%23f0f0f0'/%3E%3Ctext x='100' y='110' text-anchor='middle' fill='%23999' font-size='14'%3Eجاري التحميل...%3C/text%3E%3C/svg%3E" 
+                     alt="${escapeHtml(this.product.name)}"
+                     loading="lazy">
+                ${stockWarning}
+            </div>
             <div class="product-info">
                 <div class="product-name">${escapeHtml(this.product.name)}</div>
-                <div class="product-price">${this.product.price.toLocaleString()} ل.س</div>
+                <div class="product-price">${this.product.price.toLocaleString()} <span class="currency">ل.س</span></div>
                 ${subtotalDisplay}
                 <div class="qty-controls">
-                    <button class="qty-btn inc-qty">+</button>
-                    <input type="number" class="qty-input" value="${this.quantity}" min="0" max="${this.product.stock || 999}" step="1">
-                    <button class="qty-btn dec-qty">-</button>
+                    <button class="qty-btn dec-qty" aria-label="إنقاص"><i class="fas fa-minus"></i></button>
+                    <input type="number" class="qty-input" value="${this.quantity}" min="0" max="${this.product.stock || 999}" step="1" aria-label="الكمية">
+                    <button class="qty-btn inc-qty" aria-label="زيادة"><i class="fas fa-plus"></i></button>
                 </div>
             </div>
         `;
@@ -48,15 +59,15 @@ export class ProductCard {
         this.subtotalSpan = card.querySelector('.subtotal-val');
         this.subtotalRow = card.querySelector('.item-subtotal');
         this.imageElement = card.querySelector(`#${uniqueId}`);
-
-        const incBtn = card.querySelector('.inc-qty');
-        const decBtn = card.querySelector('.dec-qty');
+        this.plusBtn = card.querySelector('.inc-qty');
+        this.minusBtn = card.querySelector('.dec-qty');
         
-        incBtn.addEventListener('click', (e) => {
+        // إضافة المستمعين
+        this.plusBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.changeQuantity(1);
         });
-        decBtn.addEventListener('click', (e) => {
+        this.minusBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.changeQuantity(-1);
         });
@@ -66,19 +77,18 @@ export class ProductCard {
             if (isNaN(newVal)) newVal = 0;
             const maxStock = this.product.stock || 999;
             newVal = Math.min(maxStock, Math.max(0, newVal));
-            const delta = newVal - this.quantity;
-            if (delta !== 0) {
+            if (newVal !== this.quantity) {
                 this.quantity = newVal;
                 this.updateUI();
-                if (this.onQuantityChange) {
-                    this.onQuantityChange(this.product.name, this.quantity, delta);
-                }
+                this.notifyChange();
             }
             this.qtyInput.value = this.quantity;
         });
 
+        // تحميل الصورة
         this.loadImage();
         this.updateUI();
+        
         return card;
     }
 
@@ -90,7 +100,6 @@ export class ProductCard {
             return;
         }
 
-        // محاولة الحصول من الكاش
         let cachedBlob = null;
         try {
             cachedBlob = await this.storage.getImageBlob(imageUrl);
@@ -109,7 +118,6 @@ export class ProductCard {
             return;
         }
 
-        // تحميل مباشر مع تخزين
         this.loadImageDirect();
     }
 
@@ -121,23 +129,37 @@ export class ProductCard {
         }
 
         try {
-            const res = await fetch(imageUrl, { mode: 'cors' });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const blob = await res.blob();
-            await this.storage.saveImageBlob(imageUrl, blob);
-            const url = URL.createObjectURL(blob);
-            this.imageElement.src = url;
-            this.imageElement.onload = () => URL.revokeObjectURL(url);
-            this.imageElement.onerror = () => {
-                URL.revokeObjectURL(url);
-                this.setPlaceholderImage();
+            // استخدم img عادي للتغلب على CORS إن أمكن
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.onload = async () => {
+                // محاولة تخزين الصورة كـ blob عبر canvas (قد يفشل لـ CORS لكنها محاولة)
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    canvas.toBlob(async (blob) => {
+                        if (blob) {
+                            await this.storage.saveImageBlob(imageUrl, blob);
+                        }
+                        this.imageElement.src = imageUrl; // نعرض الصورة الأصلية
+                    });
+                } catch (e) {
+                    this.imageElement.src = imageUrl;
+                }
+                this.imageElement.onerror = () => this.setPlaceholderImage();
             };
+            img.onerror = () => {
+                this.imageElement.src = imageUrl;
+                this.imageElement.onerror = () => this.setPlaceholderImage();
+            };
+            img.src = imageUrl;
         } catch (err) {
-            console.warn(`فشل تحميل الصورة: ${imageUrl}`, err);
+            console.warn(`Failed to load image: ${imageUrl}`, err);
             this.imageElement.src = imageUrl;
-            this.imageElement.onerror = () => {
-                this.setPlaceholderImage();
-            };
+            this.imageElement.onerror = () => this.setPlaceholderImage();
         }
     }
 
@@ -148,17 +170,32 @@ export class ProductCard {
     }
 
     updateUI() {
+        if (!this.qtyInput) return;
         this.qtyInput.value = this.quantity;
         if (this.quantity > 0) {
             const subtotal = this.quantity * this.product.price;
-            this.subtotalSpan.innerText = subtotal.toLocaleString();
-            this.subtotalRow.style.display = 'block';
+            if (this.subtotalSpan) this.subtotalSpan.innerText = subtotal.toLocaleString();
+            if (this.subtotalRow) this.subtotalRow.style.display = 'flex';
+            // إضافة تأثير نبض للبطاقة
+            this.element.classList.add('added');
+            setTimeout(() => this.element.classList.remove('added'), 300);
         } else {
-            this.subtotalRow.style.display = 'none';
+            if (this.subtotalRow) this.subtotalRow.style.display = 'none';
+        }
+        // تعطيل زر الزيادة إذا وصل للمخزون
+        const maxStock = this.product.stock || 999;
+        if (this.plusBtn) {
+            this.plusBtn.disabled = (this.quantity >= maxStock);
+        }
+        if (this.minusBtn) {
+            this.minusBtn.disabled = (this.quantity <= 0);
         }
     }
 
     changeQuantity(delta) {
+        if (this.isUpdating) return;
+        this.isUpdating = true;
+        
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
         this.debounceTimer = setTimeout(() => {
             const newVal = this.quantity + delta;
@@ -166,26 +203,46 @@ export class ProductCard {
             if (newVal >= 0 && newVal <= maxStock) {
                 this.quantity = newVal;
                 this.updateUI();
-                this.element.classList.add('added');
-                setTimeout(() => this.element.classList.remove('added'), 300);
-                if (this.onQuantityChange) {
-                    this.onQuantityChange(this.product.name, this.quantity, delta);
-                }
+                this.notifyChange();
             }
             this.debounceTimer = null;
-        }, 150);
+            this.isUpdating = false;
+        }, 100);
+    }
+
+    notifyChange() {
+        if (this.onQuantityChange) {
+            this.onQuantityChange(this.product.name, this.quantity, null);
+        }
+    }
+
+    // تعيين الكمية من الخارج (مثلاً عند تحديث العربة من الدراور)
+    setQuantity(qty) {
+        const maxStock = this.product.stock || 999;
+        const newQty = Math.min(maxStock, Math.max(0, qty));
+        if (newQty !== this.quantity) {
+            this.quantity = newQty;
+            this.updateUI();
+            // لا نستدعي notifyChange هنا لتجنب حلقة لا نهائية، لأن المتغير قد أتى من CartManager أصلاً
+        }
     }
 
     getQuantity() {
         return this.quantity;
     }
 
-    setQuantity(qty) {
-        this.quantity = Math.min(this.product.stock || 999, Math.max(0, qty));
-        this.updateUI();
-    }
-
     getProduct() {
         return this.product;
     }
+}
+
+// دالة escapeHtml مساعدة
+function escapeHtml(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 }
