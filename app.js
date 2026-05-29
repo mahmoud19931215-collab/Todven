@@ -21,9 +21,11 @@ class App {
         await this.storage.init();
         this.themeManager = new ThemeManager();
         this.cartManager = new CartManager(CONFIG.TARGET_NUMBER, (qty, total) => {});
+        
         this.productsGrid = new ProductsGrid('productsGrid', this.storage, (totalQty, totalPrice) => {
             this.cartManager.updateFromCartItems(this.productsGrid.getAllCartItems());
         });
+        
         this.categoryManager = new CategoryManager(
             'mainChipsContainer',
             'subChipsContainer',
@@ -40,6 +42,7 @@ class App {
                 this.productsGrid.setActiveSubCategory(subCat);
             }
         );
+        
         this.cartManager.setRemoveItemCallback((productName) => {
             this.productsGrid.removeItemFromCart(productName);
             this.cartManager.updateFromCartItems(this.productsGrid.getAllCartItems());
