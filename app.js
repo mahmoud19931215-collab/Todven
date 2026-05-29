@@ -18,22 +18,22 @@ class App {
     }
 
     async init() {
-        // 1. تهيئة التخزين
         this.storage = new StorageService();
         await this.storage.init();
         
-        // 2. مدير الثيم
         this.themeManager = new ThemeManager();
         
-        // 3. مدير السلة (النسخة القديمة – سيتم استبدالها لاحقاً لكن نتركها كما هي حالياً)
-        this.cartManager = new CartManager(CONFIG.TARGET_NUMBER, (qty, total) => {});
-        
-        // 4. شبكة المنتجات (بدون cartManager مؤقتاً)
-        this.productsGrid = new ProductsGrid('productsGrid', this.storage, (totalQty, totalPrice) => {
-            this.cartManager.updateFromCartItems(this.productsGrid.getAllCartItems());
+        // CartManager أولاً
+        this.cartManager = new CartManager(CONFIG.TARGET_NUMBER, (qty, total) => {
+            this.updateCartUI(qty, total);
         });
         
-        // 5. مدير التصنيفات
+        // ProductsGrid مع cartManager
+        this.productsGrid = new ProductsGrid('productsGrid', this.storage, this.cartManager, (totalQty, totalPrice) => {
+            this.updateCartUI(totalQty, totalPrice);
+            this.refreshCartDrawer(); // تحديث الدراور عند تغير السلة
+        });
+        
         this.categoryManager = new CategoryManager(
             'mainChipsContainer',
             'subChipsContainer',
@@ -51,13 +51,12 @@ class App {
             }
         );
         
-        // 6. إزالة منتج من السلة
         this.cartManager.setRemoveItemCallback((productName) => {
             this.productsGrid.removeItemFromCart(productName);
-            this.cartManager.updateFromCartItems(this.productsGrid.getAllCartItems());
+            this.refreshCartDrawer();
         });
         
-        // 7. شريط التقدم
+        // شريط التقدم
         const progressBar = document.getElementById('globalProgress');
         const progressFill = progressBar?.querySelector('.progress-fill');
         if (progressBar && progressFill) {
@@ -71,7 +70,38 @@ class App {
             });
         }
         
-        // 8. البحث
+        // البحث
+        this.setupSearch();
+        
+        // عرض بيانات مخزنة مؤقتاً
+        const skeleton = document.getElementById('skeletonLoader');
+        const productsGridDiv = document.getElementById('productsGrid');
+        const cachedData = await this.storage.getApiCache();
+        if (cachedData && Object.keys(cachedData).length > 0) {
+            console.log('[App] Using cached data');
+            this.renderFullData(cachedData);
+            const timestamp = await this.storage.getLastUpdateTimestamp();
+            this.showOfflineToast(true, timestamp);
+            if (skeleton) skeleton.style.display = 'none';
+            if (productsGridDiv) productsGridDiv.style.display = 'grid';
+        } else {
+            console.log('[App] No valid cache found');
+        }
+        
+        await this.fetchFreshDataWithRetry();
+        
+        this.setupNetworkListeners();
+        this.setupSettingsModal();
+        this.setupCartDrawer();   // إضافة ربط الدراور
+        
+        // تحديث واجهة السلة
+        setTimeout(() => {
+            this.updateCartUI(this.cartManager.totalQuantity, this.cartManager.totalPrice);
+            this.refreshCartDrawer();
+        }, 500);
+    }
+    
+    setupSearch() {
         const searchInput = document.getElementById('searchInput');
         const clearSearch = document.getElementById('clearSearch');
         const searchStats = document.getElementById('searchStats');
@@ -93,53 +123,149 @@ class App {
                 clearSearch.style.display = 'none';
             });
         }
+    }
+    
+    setupCartDrawer() {
+        const drawer = document.getElementById('cartDrawer');
+        const overlay = document.getElementById('cartOverlay');
+        const openBtn = document.getElementById('cartDrawerBtn');
+        const closeBtn = document.querySelector('.drawer-close');
+        const whatsappBtn = document.getElementById('drawerWhatsappBtn');
         
-        // 9. عرض البيانات المخزنة مؤقتاً أولاً (إن وجدت)
-        const skeleton = document.getElementById('skeletonLoader');
-        const productsGridDiv = document.getElementById('productsGrid');
-        const cachedData = await this.storage.getApiCache();
-        if (cachedData && Object.keys(cachedData).length > 0) {
-            console.log('[App] Using cached data');
-            this.renderFullData(cachedData);
-            this.showOfflineToast(true, this.storage.getLastUpdateTimestamp());
-            if (skeleton) skeleton.style.display = 'none';
-            if (productsGridDiv) productsGridDiv.style.display = 'grid';
-        } else {
-            console.log('[App] No valid cache found');
+        if (openBtn) {
+            openBtn.addEventListener('click', () => {
+                this.refreshCartDrawer();
+                drawer?.classList.add('open');
+                overlay?.classList.add('open');
+            });
+        }
+        const closeDrawer = () => {
+            drawer?.classList.remove('open');
+            overlay?.classList.remove('open');
+        };
+        if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+        if (overlay) overlay.addEventListener('click', closeDrawer);
+        if (whatsappBtn) {
+            whatsappBtn.addEventListener('click', () => this.sendOrderToWhatsApp());
         }
         
-        // 10. جلب بيانات جديدة (مع محاولة إعادة المحاولة)
-        await this.fetchFreshDataWithRetry();
+        // زر الواتساب في الفوتر الثابت
+        const footerWhatsapp = document.getElementById('whatsappFooterBtn');
+        if (footerWhatsapp) {
+            footerWhatsapp.addEventListener('click', () => this.sendOrderToWhatsApp());
+        }
+    }
+    
+    refreshCartDrawer() {
+        const drawerBody = document.getElementById('cartItemsList');
+        const drawerTotalSpan = document.getElementById('drawerTotal');
+        if (!drawerBody) return;
         
-        // 11. مستمعي الشبكة
-        this.setupNetworkListeners();
+        const items = this.cartManager.getCartItems();
+        if (items.length === 0) {
+            drawerBody.innerHTML = '<div class="empty-cart-animation"><i class="fas fa-shopping-basket"></i><p>سلة فارغة</p><span>أضف منتجات من المتجر</span></div>';
+            if (drawerTotalSpan) drawerTotalSpan.innerText = '0';
+            return;
+        }
         
-        // 12. إعدادات المودال
-        this.setupSettingsModal();
+        let total = 0;
+        const html = items.map(item => {
+            const subtotal = item.quantity * item.price;
+            total += subtotal;
+            return `
+                <div class="cart-item" data-name="${escapeHtml(item.name)}">
+                    <div class="cart-item-img">
+                        ${item.imageUrl ? `<img src="${escapeHtml(item.imageUrl)}" loading="lazy">` : '<i class="fas fa-box"></i>'}
+                    </div>
+                    <div class="cart-item-info">
+                        <div class="cart-item-name">${escapeHtml(item.name)}</div>
+                        <div class="cart-item-price">${item.price.toLocaleString()} ل.س</div>
+                        <div class="cart-item-qty-control">
+                            <button class="cart-qty-dec" data-name="${escapeHtml(item.name)}">-</button>
+                            <span class="cart-item-qty">${item.quantity}</span>
+                            <button class="cart-qty-inc" data-name="${escapeHtml(item.name)}">+</button>
+                        </div>
+                    </div>
+                    <button class="remove-item" data-name="${escapeHtml(item.name)}"><i class="fas fa-trash-alt"></i></button>
+                </div>
+            `;
+        }).join('');
+        drawerBody.innerHTML = html;
+        if (drawerTotalSpan) drawerTotalSpan.innerText = total.toLocaleString();
         
-        // 13. تحديث السلة بعد فترة قصيرة
-        setTimeout(() => {
-            this.cartManager.updateFromCartItems(this.productsGrid.getAllCartItems());
-        }, 500);
+        // إضافة أحداث الأزرار
+        drawerBody.querySelectorAll('.cart-qty-dec').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const name = btn.getAttribute('data-name');
+                const current = this.cartManager.getItemQuantity(name);
+                if (current > 0) this.cartManager.updateItem(name, current - 1, null, null);
+                this.refreshCartDrawer();
+                this.productsGrid.updateProductQuantity(name, current - 1);
+                this.updateCartUI(this.cartManager.totalQuantity, this.cartManager.totalPrice);
+            });
+        });
+        drawerBody.querySelectorAll('.cart-qty-inc').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const name = btn.getAttribute('data-name');
+                const current = this.cartManager.getItemQuantity(name);
+                this.cartManager.updateItem(name, current + 1, null, null);
+                this.refreshCartDrawer();
+                this.productsGrid.updateProductQuantity(name, current + 1);
+                this.updateCartUI(this.cartManager.totalQuantity, this.cartManager.totalPrice);
+            });
+        });
+        drawerBody.querySelectorAll('.remove-item').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const name = btn.getAttribute('data-name');
+                this.cartManager.removeItem(name);
+                this.productsGrid.updateProductQuantity(name, 0);
+                this.refreshCartDrawer();
+                this.updateCartUI(this.cartManager.totalQuantity, this.cartManager.totalPrice);
+            });
+        });
+    }
+    
+    updateCartUI(totalQty, totalPrice) {
+        const badge = document.getElementById('cartBadge');
+        if (badge) badge.innerText = totalQty.toString();
+        const grandTotalSpan = document.getElementById('grandTotal');
+        if (grandTotalSpan) grandTotalSpan.innerText = totalPrice.toLocaleString();
+        const footer = document.querySelector('.cart-floating-footer');
+        if (footer) {
+            if (totalQty > 0) footer.classList.add('show');
+            else footer.classList.remove('show');
+        }
+    }
+    
+    sendOrderToWhatsApp() {
+        const items = this.cartManager.getCartItems();
+        if (items.length === 0) {
+            this.showToast('السلة فارغة', 'warning');
+            return;
+        }
+        let message = "🛍️ طلب جديد:\n";
+        let total = 0;
+        items.forEach(item => {
+            message += `- ${item.name} × ${item.quantity} = ${(item.quantity * item.price).toLocaleString()} ل.س\n`;
+            total += item.quantity * item.price;
+        });
+        message += `\n💰 الإجمالي: ${total.toLocaleString()} ل.س`;
+        const url = `https://wa.me/${CONFIG.TARGET_NUMBER}?text=${encodeURIComponent(message)}`;
+        window.open(url, '_blank');
     }
     
     async fetchFreshDataWithRetry(retries = CONFIG.FETCH_RETRY_COUNT) {
         for (let i = 0; i < retries; i++) {
             try {
                 await this.fetchFreshData();
-                return; // نجاح
+                return;
             } catch (err) {
                 console.warn(`[App] Fetch attempt ${i+1} failed:`, err);
                 if (i === retries - 1) {
-                    // الفشل النهائي
-                    if (!this.fullData) {
-                        this.showOfflinePage();
-                    } else {
-                        this.showOfflineToast(true, this.storage.getLastUpdateTimestamp());
-                    }
+                    if (!this.fullData) this.showOfflinePage();
+                    else this.showOfflineToast(true, await this.storage.getLastUpdateTimestamp());
                     this.showToast('فشل تحميل البيانات من الخادم', 'error');
                 } else {
-                    // انتظار قبل إعادة المحاولة
                     await new Promise(r => setTimeout(r, 1000 * (i + 1)));
                 }
             }
@@ -150,47 +276,25 @@ class App {
         console.log('[App] Fetching fresh data from', CONFIG.API_URL);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), CONFIG.FETCH_TIMEOUT);
-        
         try {
             const response = await fetch(CONFIG.API_URL, { 
                 signal: controller.signal,
-                headers: {
-                    'Accept': 'application/json',
-                    'Cache-Control': 'no-cache'
-                }
+                headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' }
             });
             clearTimeout(timeoutId);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
-            console.log('[App] Received data:', data);
-            
-            // التحقق من صحة البيانات
-            if (!data || typeof data !== 'object') {
-                throw new Error('Invalid data format: not an object');
+            if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+                throw new Error('Invalid data format');
             }
-            
-            // التأكد من وجود تصنيفات على الأقل
-            if (Object.keys(data).length === 0) {
-                throw new Error('Empty data object');
-            }
-            
-            // حفظ في الكاش
             await this.storage.saveApiCache(data);
-            
-            // عرض البيانات
             this.renderFullData(data);
             this.showOfflineToast(false);
             this.hideOfflinePage();
             this.showToast('تم تحديث البيانات بنجاح', 'success');
-            
         } catch (err) {
             clearTimeout(timeoutId);
-            console.error('[App] Fetch failed:', err);
-            throw err; // لإعادة المحاولة من الأعلى
+            throw err;
         }
     }
     
@@ -214,7 +318,7 @@ class App {
         if (gridDiv) gridDiv.style.display = 'grid';
     }
     
-    showOfflineToast(isCached, timestamp) {
+    async showOfflineToast(isCached, timestamp) {
         const toast = document.getElementById('offlineToast');
         if (!toast) return;
         if (isCached) {
@@ -226,11 +330,8 @@ class App {
             const refreshBtn = document.getElementById('refreshDataBtn');
             if (refreshBtn) {
                 refreshBtn.onclick = () => {
-                    if (navigator.onLine) {
-                        this.fetchFreshDataWithRetry();
-                    } else {
-                        this.showToast('لا يوجد اتصال بالإنترنت', 'warning');
-                    }
+                    if (navigator.onLine) this.fetchFreshDataWithRetry();
+                    else this.showToast('لا يوجد اتصال بالإنترنت', 'warning');
                 };
             }
             const closeToast = document.getElementById('closeToastBtn');
@@ -290,7 +391,6 @@ class App {
                 clearCacheBtn.addEventListener('click', async () => {
                     if (confirm('سيتم مسح جميع الصور والبيانات المخزنة. هل أنت متأكد؟')) {
                         await this.storage.clearAllCache();
-                        // مسح سلة التسوق أيضاً
                         localStorage.removeItem(CONFIG.STORAGE_KEYS.CART);
                         this.showToast('تم مسح الكاش، سيتم إعادة تحميل البيانات', 'info');
                         setTimeout(() => location.reload(), 1000);
@@ -310,13 +410,20 @@ class App {
         }
         toast.textContent = message;
         toast.classList.add('show', type);
-        setTimeout(() => {
-            toast.classList.remove('show', type);
-        }, 3000);
+        setTimeout(() => toast.classList.remove('show', type), 3000);
     }
 }
 
-// تشغيل التطبيق
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => new App());
 } else {
