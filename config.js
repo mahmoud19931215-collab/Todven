@@ -6,15 +6,15 @@ export const CONFIG = {
     // رابط API الرئيسي (Google Sheets)
     API_URL: "https://script.google.com/macros/s/AKfycbwrXoE1tAYJb6D19UM9M-FSUDE9AMd73cj0u35bL7tyG902QN0B6nuDFisNQfgEwELq/exec",
     
-    // رابط API احتياطي (يمكنك تغييره إلى رابط آخر يعمل)
-    FALLBACK_API_URL: "https://api.npoint.io/your-fallback-data", // ضع رابط JSON بديل هنا
+    // رابط API احتياطي (يمكنك تفعيله بوضع رابط حقيقي)
+    FALLBACK_API_URL: "",   // مثال: "https://api.npoint.io/your-id"
     
     // إعدادات العرض
     ITEMS_PER_PAGE: 12,
     SECTIONS_PER_LOAD: 6,
     
     // إعدادات الكاش والتخزين
-    CACHE_TTL: 3600000,
+    CACHE_TTL: 3600000,        // 1 hour
     DB_NAME: "TogvenDB",
     DB_VERSION: 6,
     STORES: {
@@ -22,10 +22,11 @@ export const CONFIG = {
         API_CACHE: "apiCache"
     },
     
-    // إعدادات الشبكة
+    // إعدادات الشبكة مع فترات انتظار متزايدة لـ 503
     DEBOUNCE_DELAY: 150,
-    FETCH_RETRY_COUNT: 2,           // عدد المحاولات لكل رابط
-    FETCH_TIMEOUT: 20000,           // 20 ثانية (زيادة المهلة)
+    FETCH_RETRY_COUNT: 3,
+    FETCH_TIMEOUT: 25000,       // 25 ثانية
+    RETRY_DELAYS: [2000, 5000, 10000], // 2, 5, 10 ثواني
     
     // الثيم الافتراضي
     DEFAULT_THEME: "light",
@@ -43,32 +44,10 @@ export const CONFIG = {
     MAX_IMAGE_RETRIES: 2
 };
 
-// دالة لتوليد مفتاح فريد للمنتج
-export function getProductKey(productName, category = "") {
-    return `${category}-${productName}`
-        .toLowerCase()
-        .replace(/[^a-z0-9-]/g, "_")
-        .substring(0, 100);
-}
-
-// التحقق من صحة رابط الصورة
-export function isValidImageUrl(url) {
-    return url && typeof url === 'string' && 
-           (url.startsWith("http://") || url.startsWith("https://"));
-}
-
-// دالة تأخير (Promise)
 export function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// تنسيق العملة
-export function formatCurrency(amount) {
-    if (isNaN(amount)) amount = 0;
-    return amount.toLocaleString("ar-EG") + " ل.س";
-}
-
-// ترميز النص لـ HTML
 export function escapeHtml(str) {
     if (!str) return "";
     return str
@@ -77,4 +56,9 @@ export function escapeHtml(str) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+}
+
+export function formatCurrency(amount) {
+    if (isNaN(amount)) amount = 0;
+    return amount.toLocaleString("ar-EG") + " ل.س";
 }
