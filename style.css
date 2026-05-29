@@ -1,5 +1,5 @@
-/* ==================== ملف الأنماط الرئيسي لتطوجفن ==================== */
-/* يدعم الوضع الليلي، الخطوط المتجاوبة، التأثيرات الحديثة */
+/* ==================== ملف الأنماط الرئيسي لتوجفن - نسخة محسنة للأجهزة الضعيفة ==================== */
+/* يدعم الوضع الليلي، الخطوط المتجاوبة، مع تحسينات الأداء */
 
 /* ========== الثوابت والمتغيرات ========== */
 :root {
@@ -57,7 +57,7 @@ body {
     transition: background 0.3s, color 0.2s;
 }
 
-/* ========== الخلفية المتحركة ========== */
+/* ========== الخلفية المتحركة (محسنة لتقليل استهلاك CPU) ========== */
 .animated-bg {
     position: fixed;
     top: 0;
@@ -68,6 +68,7 @@ body {
     overflow: hidden;
     background: linear-gradient(135deg, #c8e8f5, #e0f2fe);
     transition: background 0.5s;
+    will-change: auto; /* لا نستخدم will-change للخلفية الثابتة */
 }
 
 [data-theme="dark"] .animated-bg {
@@ -90,6 +91,7 @@ body {
     border-radius: 50%;
     box-shadow: 0 0 40px #ffcc44;
     animation: float 6s infinite alternate, pulseGlow 2s infinite;
+    will-change: transform;
 }
 
 @keyframes float {
@@ -106,11 +108,19 @@ body {
     background: rgba(255,255,255,0.9);
     border-radius: 1000px;
     animation: moveCloud linear infinite;
+    will-change: transform;
 }
 
 .c1 { width: 160px; height: 70px; top: 15%; left: -180px; animation-duration: 22s; }
 .c2 { width: 210px; height: 85px; top: 45%; left: -250px; animation-duration: 28s; animation-delay: -5s; }
 .c3 { width: 130px; height: 55px; top: 70%; left: -150px; animation-duration: 18s; animation-delay: -10s; }
+
+/* إزالة الحركة على الأجهزة الضعيفة اختيارياً (يمكن تفعيلها عن طريق media query) */
+@media (prefers-reduced-motion: reduce) {
+    .sun, .cloud, .moon, .star {
+        animation: none !important;
+    }
+}
 
 .cloud:before, .cloud:after {
     content: '';
@@ -140,6 +150,7 @@ body {
     border-radius: 50%;
     box-shadow: 0 0 30px #ffefb0;
     animation: floatMoon 5s infinite alternate;
+    will-change: transform;
 }
 
 @keyframes floatMoon {
@@ -297,6 +308,7 @@ body {
     margin: 8px 12px;
     border-radius: 50px;
     scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
 }
 .chips-horizontal::-webkit-scrollbar {
     display: none;
@@ -337,31 +349,32 @@ body {
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 20px;
 }
-/* بطاقة المنتج */
+/* بطاقة المنتج - تحسين الأداء: use transform for hover */
 .product-card {
     background: var(--glass-bg);
     backdrop-filter: blur(12px);
     border-radius: var(--radius-card);
     overflow: hidden;
     border: var(--glass-border);
-    transition: var(--transition);
+    transition: transform 0.25s ease, box-shadow 0.3s ease;
     cursor: pointer;
     display: flex;
     flex-direction: column;
+    will-change: transform;
 }
 .product-card:hover {
     transform: translateY(-6px);
     box-shadow: var(--shadow-md);
 }
-/* الصورة: تأخذ عرض الكرت بالكامل بدون أي padding أو حدود */
+/* الصورة: تأخذ عرض الكرت بالكامل بدون أي padding */
 .product-img {
-    width: 100%;          /* العرض الكامل للكرت */
-    display: block;       /* يزيل أي فراغ سفلي */
-    object-fit: cover;    /* تغطي المساحة كاملة بدون تشويه (أو استخدم contain إذا أردت رؤية الصورة كاملة) */
+    width: 100%;
+    display: block;
+    object-fit: cover;
     background: rgba(255,255,255,0.5);
     padding: 0;
     margin: 0;
-    transition: transform 0.3s;
+    transition: transform 0.3s ease;
     border-radius: 28px 28px 0 0;
 }
 .product-card:hover .product-img {
@@ -378,6 +391,7 @@ body {
     font-size: 18px;
     font-weight: 800;
     margin-bottom: 6px;
+    word-break: break-word;
 }
 .product-price {
     font-size: 16px;
@@ -396,9 +410,7 @@ body {
     gap: 10px;
     margin-top: 8px;
 }
-/* الزر + (زيادة) أخضر */
-.qty-btn.inc-qty {
-    background: var(--primary);
+.qty-btn.inc-qty, .qty-btn.dec-qty {
     border: none;
     width: 38px;
     height: 38px;
@@ -407,30 +419,22 @@ body {
     font-size: 20px;
     font-weight: bold;
     cursor: pointer;
-    transition: 0.1s;
+    transition: transform 0.1s ease;
+}
+.qty-btn.inc-qty {
+    background: var(--primary);
 }
 .qty-btn.inc-qty:active {
     transform: scale(0.85);
     background: var(--primary-dark);
 }
-/* الزر - (نقص) أحمر / داكن */
 .qty-btn.dec-qty {
     background: var(--danger);
-    border: none;
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    color: white;
-    font-size: 20px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: 0.1s;
 }
 .qty-btn.dec-qty:active {
     transform: scale(0.85);
     background: var(--danger-dark);
 }
-/* في الوضع الليلي نضمن الألوان */
 [data-theme="dark"] .qty-btn.inc-qty {
     background: var(--primary-dark);
 }
@@ -563,6 +567,7 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 16px;
+    -webkit-overflow-scrolling: touch;
 }
 .cart-item {
     display: flex;
@@ -757,5 +762,13 @@ body {
     .search-stats {
         width: 100%;
         text-align: center;
+    }
+}
+
+/* ========== تحسين إضافي للأجهزة الضعيفة: تقليل تأثير الـ backdrop-filter إذا كان الجهاز بطيئاً ========== */
+@media (prefers-reduced-motion: reduce) or (update: slow) {
+    .app-header, .chips-horizontal, .product-card, .cart-floating-footer, .offline-toast {
+        backdrop-filter: none !important;
+        background: var(--glass-bg) !important;
     }
 }
