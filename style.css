@@ -1,5 +1,5 @@
-/* ==================== ملف الأنماط الرئيسي لتطوجفن - نسخة الأداء ==================== */
-/* تم تحسينه للأجهزة الضعيفة مع الحفاظ على المظهر الجذاب */
+/* ==================== ملف الأنماط الرئيسي لتطوجفن - نسخة محسّنة الشكل ==================== */
+/* تم تحسين المظهر مع الحفاظ على الثوابت (الخط، أبعاد الصور، السلة، التصنيفات، الثيم، ألوان الأزرار) */
 
 /* ========== الثوابت والمتغيرات ========== */
 :root {
@@ -15,12 +15,13 @@
     --text-light: #ecf0f1;
     --gray-muted: #95a5a6;
     --border-light: rgba(255,255,255,0.3);
-    --border-dark: rgba(0,0,0,0.08);
-    --shadow-sm: 0 2px 8px rgba(0,0,0,0.08);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
-    --radius-card: 24px;
+    --border-dark: rgba(0,0,0,0.06);
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
+    --shadow-md: 0 8px 20px rgba(0,0,0,0.08);
+    --shadow-lg: 0 12px 28px rgba(0,0,0,0.12);
+    --radius-card: 28px;
     --radius-btn: 40px;
-    --transition: all 0.2s ease;
+    --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 [data-theme="dark"] {
@@ -28,11 +29,11 @@
     --primary-dark: #229954;
     --dark-bg: #0f0f1a;
     --light-bg: #12121f;
-    --text-dark: #e0e0e0;
+    --text-dark: #eef2f5;
     --text-light: #b0b0b0;
     --gray-muted: #6c7a89;
-    --border-light: rgba(255,255,255,0.1);
-    --border-dark: rgba(255,255,255,0.05);
+    --border-light: rgba(255,255,255,0.08);
+    --border-dark: rgba(255,255,255,0.03);
 }
 
 * {
@@ -53,7 +54,7 @@ body {
     transition: background 0.3s, color 0.2s;
 }
 
-/* ========== خلفية ثابتة (بدون حركة مكثفة) ========== */
+/* ========== خلفية ثابتة (تم تبسيط الحركة للأجهزة الضعيفة) ========== */
 .animated-bg {
     position: fixed;
     top: 0;
@@ -69,11 +70,8 @@ body {
     background: linear-gradient(135deg, #0a0f2a, #0b1a2e);
 }
 
-/* تبسيط الحركات: إزالة الرسوم المتحركة للغيوم على الأجهزة الضعيفة اختيارياً، لكننا نبقيها خفيفة */
 @media (prefers-reduced-motion: reduce) {
-    .cloud, .sun, .moon, .star {
-        animation: none !important;
-    }
+    .cloud, .sun, .moon, .star { animation: none !important; }
 }
 
 .sun, .moon {
@@ -166,21 +164,20 @@ body {
     transition: width 0.1s linear;
 }
 
-/* ========== رأس التطبيق (استخدام خلفية شبه شفافة خفيفة) ========== */
+/* ========== رأس التطبيق ========== */
 .app-header {
     position: sticky;
     top: 0;
     z-index: 1000;
     background: rgba(255,255,255,0.85);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-light);
-    padding: 8px 16px;
+    padding: 10px 16px;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
 }
-
 [data-theme="dark"] .app-header {
     background: rgba(20,20,35,0.85);
 }
@@ -191,21 +188,22 @@ body {
 }
 
 .icon-btn {
-    background: rgba(0,0,0,0.05);
-    border: none;
+    background: rgba(0,0,0,0.04);
+    border: 1px solid var(--border-light);
     border-radius: 50%;
-    width: 40px;
-    height: 40px;
+    width: 42px;
+    height: 42px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: transform 0.1s;
+    transition: transform 0.1s, background 0.2s;
     color: var(--text-dark);
     position: relative;
 }
 .icon-btn:active {
     transform: scale(0.94);
+    background: rgba(0,0,0,0.08);
 }
 .cart-icon .badge {
     position: absolute;
@@ -228,7 +226,7 @@ body {
 }
 .search-icon {
     position: absolute;
-    right: 12px;
+    right: 14px;
     top: 50%;
     transform: translateY(-50%);
     color: var(--gray-muted);
@@ -236,25 +234,30 @@ body {
 }
 #searchInput {
     width: 100%;
-    padding: 8px 35px 8px 12px;
+    padding: 10px 40px 10px 14px;
     border-radius: 40px;
     border: 1px solid var(--border-light);
-    background: rgba(255,255,255,0.5);
+    background: rgba(255,255,255,0.6);
     color: var(--text-dark);
     font-size: 14px;
     outline: none;
+    transition: 0.2s;
+}
+#searchInput:focus {
+    background: rgba(255,255,255,0.9);
+    border-color: var(--primary);
 }
 .clear-search {
     position: absolute;
-    left: 12px;
+    left: 14px;
     top: 50%;
     transform: translateY(-50%);
     background: rgba(0,0,0,0.3);
     border: none;
     border-radius: 50%;
-    width: 20px;
-    height: 20px;
-    font-size: 10px;
+    width: 22px;
+    height: 22px;
+    font-size: 12px;
     color: white;
     cursor: pointer;
 }
@@ -265,36 +268,32 @@ body {
     white-space: nowrap;
 }
 
-/* ========== أزرار التصنيفات ========== */
+/* ========== أزرار التصنيفات (لم تتغير) ========== */
 .chips-horizontal {
     display: flex;
     overflow-x: auto;
     gap: 8px;
-    padding: 10px 16px;
+    padding: 12px 16px;
     background: rgba(255,255,255,0.5);
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(8px);
     margin: 8px 12px;
     border-radius: 50px;
     scrollbar-width: none;
 }
-.chips-horizontal::-webkit-scrollbar {
-    display: none;
-}
+.chips-horizontal::-webkit-scrollbar { display: none; }
 .chip {
-    padding: 5px 14px;
+    padding: 6px 18px;
     border-radius: 40px;
-    background: rgba(255,255,255,0.7);
+    background: rgba(255,255,255,0.8);
     border: 1px solid var(--border-light);
     color: var(--text-dark);
     font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
     cursor: pointer;
-    transition: 0.1s;
+    transition: 0.15s;
 }
-.chip:active {
-    transform: scale(0.96);
-}
+.chip:active { transform: scale(0.96); }
 .chip.active {
     background: var(--primary);
     color: white;
@@ -307,28 +306,28 @@ body {
 
 /* ========== شبكة المنتجات ========== */
 .main-container {
-    padding: 12px;
+    padding: 16px;
     max-width: 800px;
     margin: 0 auto;
 }
 .products-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
 }
 .product-card {
     background: rgba(255,255,255,0.9);
     border-radius: var(--radius-card);
     overflow: hidden;
     border: 1px solid var(--border-light);
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: var(--transition);
     cursor: pointer;
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-sm);
 }
 .product-card:hover {
-    transform: translateY(-3px);
+    transform: translateY(-4px);
     box-shadow: var(--shadow-md);
 }
 .product-img {
@@ -336,49 +335,50 @@ body {
     height: auto;
     display: block;
     object-fit: cover;
-    background: #f0f0f0;
+    background: #f5f5f5;
     padding: 0;
-    transition: transform 0.2s;
-    border-radius: 24px 24px 0 0;
+    transition: transform 0.3s ease;
+    border-radius: 28px 28px 0 0;
 }
 .product-card:hover .product-img {
-    transform: scale(1.01);
+    transform: scale(1.02);
 }
 .product-info {
-    padding: 12px;
+    padding: 16px;
     text-align: center;
     flex: 1;
     display: flex;
     flex-direction: column;
 }
 .product-name {
-    font-size: 17px;
+    font-size: 18px;
     font-weight: 800;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
+    line-height: 1.3;
 }
 .product-price {
-    font-size: 15px;
+    font-size: 16px;
     color: var(--primary);
     font-weight: bold;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     display: inline-block;
-    background: rgba(46,204,113,0.15);
-    padding: 2px 10px;
+    background: rgba(46,204,113,0.12);
+    padding: 4px 14px;
     border-radius: 30px;
 }
 .qty-controls {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    margin-top: 6px;
+    gap: 10px;
+    margin-top: 8px;
 }
 .qty-btn.inc-qty, .qty-btn.dec-qty {
     border: none;
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    font-size: 18px;
+    font-size: 20px;
     font-weight: bold;
     cursor: pointer;
     transition: 0.1s;
@@ -400,24 +400,24 @@ body {
     background: var(--danger-dark);
 }
 .qty-input {
-    width: 45px;
+    width: 48px;
     text-align: center;
-    font-size: 16px;
+    font-size: 17px;
     font-weight: bold;
     background: transparent;
     border: 1px solid var(--border-light);
     border-radius: 30px;
-    padding: 4px;
+    padding: 5px;
     color: var(--text-dark);
 }
 .item-subtotal {
-    margin-top: 8px;
-    font-size: 12px;
+    margin-top: 10px;
+    font-size: 13px;
     font-weight: bold;
     color: var(--primary-dark);
 }
 
-/* ========== فوتر السلة العائم ========== */
+/* ========== فوتر السلة العائم (لم يتغير) ========== */
 .cart-floating-footer {
     position: fixed;
     bottom: 20px;
@@ -426,51 +426,40 @@ body {
     width: 90%;
     max-width: 500px;
     background: rgba(44,62,80,0.95);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(12px);
     border-radius: 50px;
-    padding: 10px 18px;
+    padding: 12px 22px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     z-index: 2000;
     visibility: hidden;
     opacity: 0;
-    transition: 0.2s;
-    box-shadow: var(--shadow-md);
+    transition: 0.25s;
+    box-shadow: var(--shadow-lg);
 }
 .cart-floating-footer.show {
     visibility: visible;
     opacity: 1;
-    bottom: 25px;
+    bottom: 28px;
 }
-.total-info {
-    color: white;
-}
-.total-label {
-    font-size: 11px;
-    opacity: 0.8;
-}
-.total-value {
-    font-size: 18px;
-    font-weight: 800;
-    margin: 0 4px;
-}
+.total-info { color: white; }
+.total-label { font-size: 12px; opacity: 0.8; }
+.total-value { font-size: 20px; font-weight: 800; margin: 0 4px; }
 .whatsapp-btn {
     background: var(--primary);
     border: none;
-    padding: 6px 16px;
+    padding: 8px 20px;
     border-radius: 40px;
     color: white;
     font-weight: bold;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     cursor: pointer;
-    transition: 0.1s;
+    transition: 0.15s;
 }
-.whatsapp-btn:active {
-    transform: scale(0.96);
-}
+.whatsapp-btn:active { transform: scale(0.96); }
 
 /* ========== دراور السلة ========== */
 .drawer {
@@ -478,18 +467,16 @@ body {
     top: 0;
     left: -100%;
     width: 85%;
-    max-width: 360px;
+    max-width: 380px;
     height: 100%;
     background: var(--light-bg);
     z-index: 3000;
     transition: left 0.25s ease;
     display: flex;
     flex-direction: column;
-    box-shadow: -2px 0 12px rgba(0,0,0,0.2);
+    box-shadow: -2px 0 20px rgba(0,0,0,0.2);
 }
-.drawer.open {
-    left: 0;
-}
+.drawer.open { left: 0; }
 .drawer-overlay {
     position: fixed;
     top: 0;
@@ -502,72 +489,55 @@ body {
     opacity: 0;
     transition: 0.15s;
 }
-.drawer-overlay.open {
-    visibility: visible;
-    opacity: 1;
-}
+.drawer-overlay.open { visibility: visible; opacity: 1; }
 .drawer-header {
-    padding: 16px;
+    padding: 18px;
     border-bottom: 1px solid var(--border-dark);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 18px;
+    font-size: 20px;
 }
 .drawer-close {
     background: none;
     border: none;
-    font-size: 26px;
+    font-size: 28px;
     cursor: pointer;
     color: var(--text-dark);
 }
 .drawer-body {
     flex: 1;
     overflow-y: auto;
-    padding: 12px;
+    padding: 16px;
 }
 .cart-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 0;
+    padding: 12px 0;
     border-bottom: 1px solid var(--border-dark);
 }
-.cart-item-info {
-    flex: 1;
-}
-.cart-item-name {
-    font-weight: bold;
-    font-size: 14px;
-}
-.cart-item-price {
-    font-size: 11px;
-    color: var(--primary);
-}
+.cart-item-info { flex: 1; }
+.cart-item-name { font-weight: bold; font-size: 15px; }
+.cart-item-price { font-size: 12px; color: var(--primary); }
 .remove-item {
     background: #e74c3c;
     border: none;
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
     color: white;
     cursor: pointer;
 }
 .drawer-footer {
-    padding: 12px;
+    padding: 16px;
     border-top: 1px solid var(--border-dark);
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
-.drawer-total {
-    font-weight: bold;
-}
-.empty-cart {
-    text-align: center;
-    padding: 30px;
-    color: var(--gray-muted);
-}
+.drawer-total { font-weight: bold; }
+.empty-cart { text-align: center; padding: 40px; color: var(--gray-muted); }
 
 /* ========== مودال الإعدادات ========== */
 .modal {
@@ -577,80 +547,69 @@ body {
     width: 100%;
     height: 100%;
     background: rgba(0,0,0,0.6);
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(6px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 4000;
     visibility: hidden;
     opacity: 0;
-    transition: 0.15s;
+    transition: 0.2s;
 }
-.modal.open {
-    visibility: visible;
-    opacity: 1;
-}
+.modal.open { visibility: visible; opacity: 1; }
 .modal-card {
     background: var(--light-bg);
-    border-radius: 28px;
+    border-radius: 32px;
     width: 90%;
-    max-width: 360px;
+    max-width: 380px;
     overflow: hidden;
 }
 .modal-header {
-    padding: 14px 18px;
+    padding: 16px 20px;
     display: flex;
     justify-content: space-between;
     border-bottom: 1px solid var(--border-dark);
     font-weight: bold;
 }
-.modal-body {
-    padding: 18px;
-}
+.modal-body { padding: 20px; }
 .danger-btn {
     background: #e74c3c;
     color: white;
     border: none;
     width: 100%;
-    padding: 10px;
+    padding: 12px;
     border-radius: 40px;
-    font-size: 14px;
+    font-size: 15px;
     cursor: pointer;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
-.hint {
-    font-size: 11px;
-    color: var(--gray-muted);
-    text-align: center;
-}
+.hint { font-size: 12px; color: var(--gray-muted); text-align: center; }
 
 /* ========== سكلتون التحميل ========== */
 .skeleton-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
 }
 .skeleton-card {
     background: rgba(255,255,255,0.7);
-    border-radius: 24px;
-    padding: 10px;
-    animation: pulse 1s infinite;
+    border-radius: 28px;
+    padding: 12px;
+    animation: pulse 1.2s infinite;
 }
 .skeleton-img {
     width: 100%;
     aspect-ratio: 1;
     background: #e0e0e0;
-    border-radius: 20px;
+    border-radius: 24px;
 }
 .skeleton-line {
-    height: 16px;
+    height: 18px;
     background: #e0e0e0;
-    margin: 10px 0;
-    border-radius: 8px;
+    margin: 12px 0;
+    border-radius: 10px;
 }
-.skeleton-line.short {
-    width: 60%;
-}
+.skeleton-line.short { width: 60%; }
 @keyframes pulse {
     0% { opacity: 0.7; }
     50% { opacity: 1; }
@@ -661,19 +620,19 @@ body {
 .offline-toast {
     background: #f39c12;
     color: #2c3e50;
-    margin: 8px 12px;
-    padding: 6px 12px;
+    margin: 10px 16px;
+    padding: 8px 16px;
     border-radius: 40px;
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 12px;
+    gap: 12px;
+    font-size: 13px;
     flex-wrap: wrap;
 }
 .offline-toast button {
     background: var(--primary);
     border: none;
-    padding: 3px 10px;
+    padding: 4px 12px;
     border-radius: 30px;
     color: white;
     cursor: pointer;
@@ -691,29 +650,28 @@ body {
     align-items: center;
     justify-content: center;
     text-align: center;
-    gap: 16px;
+    gap: 20px;
 }
 .load-more-sections-btn, .load-more-btn {
     background: var(--primary);
     border: none;
-    padding: 8px 20px;
+    padding: 10px 24px;
     border-radius: 40px;
     color: white;
     font-weight: bold;
     display: block;
-    width: 80%;
-    margin: 15px auto;
+    width: fit-content;
+    margin: 20px auto;
     text-align: center;
     cursor: pointer;
     transition: 0.1s;
+    font-size: 14px;
 }
-.load-more-sections-btn:active, .load-more-btn:active {
-    transform: scale(0.97);
-}
+.load-more-sections-btn:active, .load-more-btn:active { transform: scale(0.97); }
 
 /* تأثير الإضافة */
 .product-card.added {
-    animation: pop 0.2s ease;
+    animation: pop 0.25s ease;
 }
 @keyframes pop {
     0% { transform: scale(1); }
@@ -726,15 +684,9 @@ body {
     padding: 0 2px;
 }
 
+/* ========== متجاوب ========== */
 @media (max-width: 640px) {
-    .products-grid {
-        grid-template-columns: 1fr;
-    }
-    .app-header {
-        flex-wrap: wrap;
-    }
-    .search-stats {
-        width: 100%;
-        text-align: center;
-    }
+    .products-grid { grid-template-columns: 1fr; }
+    .app-header { flex-wrap: wrap; }
+    .search-stats { width: 100%; text-align: center; }
 }
