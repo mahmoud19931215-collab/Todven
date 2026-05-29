@@ -17,7 +17,7 @@ export class ThemeManager {
     loadTheme() {
         const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.THEME);
         if (saved === 'dark' || saved === 'light') return saved;
-        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         return prefersDark ? 'dark' : (CONFIG.DEFAULT_THEME || 'light');
     }
 
@@ -49,9 +49,6 @@ export class ThemeManager {
             if (this.metaThemeColor) this.metaThemeColor.setAttribute('content', '#10b981');
         }
         this.saveTheme(theme);
-        this.body.style.transition = 'background-color 0.3s ease, color 0.2s ease';
-        setTimeout(() => this.body.style.transition = '', 300);
-        window.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme } }));
     }
 
     toggleTheme() {
@@ -59,7 +56,9 @@ export class ThemeManager {
         this.applyTheme(newTheme);
         if (this.themeToggleBtn) {
             this.themeToggleBtn.style.transform = 'scale(0.9)';
-            setTimeout(() => this.themeToggleBtn.style.transform = '', 150);
+            setTimeout(() => {
+                if (this.themeToggleBtn) this.themeToggleBtn.style.transform = '';
+            }, 150);
         }
     }
 
@@ -77,11 +76,7 @@ export class ThemeManager {
                 this.applyTheme(e.matches ? 'dark' : 'light');
             }
         };
-        if (mediaQuery.addEventListener) {
-            mediaQuery.addEventListener('change', handleChange);
-        } else if (mediaQuery.addListener) {
-            mediaQuery.addListener(handleChange);
-        }
+        mediaQuery.addEventListener('change', handleChange);
     }
 
     getCurrentTheme() {
