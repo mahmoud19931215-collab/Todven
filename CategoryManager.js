@@ -35,12 +35,14 @@ export class CategoryManager {
         }
         this.subContainer.style.display = 'flex';
         this.subContainer.innerHTML = '';
+        
         const allChip = document.createElement('div');
         allChip.className = 'chip sub-active';
         allChip.setAttribute('data-sub', 'all');
         allChip.innerText = 'الكل';
         allChip.addEventListener('click', () => this.selectSubCategory('all'));
         this.subContainer.appendChild(allChip);
+        
         subCatsArray.forEach(sub => {
             const chip = document.createElement('div');
             chip.className = 'chip';
@@ -49,6 +51,7 @@ export class CategoryManager {
             chip.addEventListener('click', () => this.selectSubCategory(sub));
             this.subContainer.appendChild(chip);
         });
+        
         this.currentSub = 'all';
         this.onSubSelect('all');
     }
