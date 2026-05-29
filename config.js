@@ -18,7 +18,6 @@ export const CONFIG = {
         THEME: "togven_theme",
         OFFLINE_BANNER_SHOWN: "offline_banner_dismissed"
     },
-    // إعدادات إضافية للصور
     IMAGE_PLACEHOLDER: "https://via.placeholder.com/300?text=No+Image",
     IMAGE_LOADING_TIMEOUT: 5000,
     MAX_IMAGE_RETRIES: 2
