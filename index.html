@@ -1,677 +1,802 @@
+<!-- 
+================================================================================
+ المتجر ثلاثي الأبعاد بتجربة لعبة (CSS 3D Store)
+ المطور: محمود
+ التقنيات: HTML/CSS/JS خالص، Google Sheets كقاعدة بيانات
+ الجزر البرمجية:
+   1. جزيرة مشهد الـ 3D الرئيسية
+   2. جزيرة واجهة المستخدم (HUD) - العملات، السلة، الإشعارات
+   3. جزيرة تفاصيل المنتج (Modal)
+   4. جزيرة السلة الجانبية
+   5. جزيرة التحميل والاتصال بالشبكة
+ ================================================================================
+-->
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>متجر المغامر الأسطوري</title>
-    <style>
-        /* ========== المتغيرات والتدرجات الأساسية (CSS Gradients) ========== */
-        :root {
-            --pixel-bg: #0f1a0f;
-            --gold: #d4af37;
-            --pixel-green: #2e7d32;
-            --pixel-brown: #5d4037;
-            --dialog-bg: #1e1e1e;
-            --pixel-font: 'Courier New', monospace;
-            --border-light: #8bc34a;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>متجر الزنزانة - Dungeon Shop</title>
+<style>
+/* ========== إعدادات عامة وأساسيات الجزيرة ========== */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+:root {
+  --bg-dungeon: #1a0f0a;
+  --gold: #d4af37;
+  --pixel-border: 4px;
+  --perspective: 1200px;
+}
 
-        body {
-            background: var(--pixel-bg);
-            background-image: 
-                radial-gradient(circle at 20% 30%, #1e3b1e 1px, transparent 1px),
-                radial-gradient(circle at 80% 70%, #1e3b1e 1px, transparent 1px);
-            background-size: 40px 40px;
-            font-family: var(--pixel-font);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-            color: #fff;
-            image-rendering: pixelated;
-            user-select: none;
-            overflow-x: hidden;
-        }
+body {
+  font-family: 'Courier New', monospace;
+  background: var(--bg-dungeon);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  touch-action: none; /* تحكم كامل باللمس */
+  user-select: none;
+  -webkit-user-select: none;
+  position: relative;
+}
 
-        /* ========== جزيرة شريط الحالة (Status Bar Island) ========== */
-        #status-bar {
-            width: 100%;
-            max-width: 800px;
-            padding: 8px 16px;
-            background: linear-gradient(180deg, #2c3e1e, #1a2a1a);
-            border-bottom: 3px solid #4a7c3f;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 18px;
-            letter-spacing: 2px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.7);
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
+/* ---------- جزيرة مشهد الـ 3D ---------- */
+.scene-container {
+  width: 100%;
+  height: 100%;
+  perspective: var(--perspective);
+  position: absolute;
+  top: 0;
+  left: 0;
+}
 
-        .gold-display {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: #00000055;
-            padding: 4px 12px;
-            border-radius: 20px;
-            border: 2px solid var(--gold);
-        }
+.scene {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.1s ease-out;
+  will-change: transform;
+  /* الوضع الافتراضي - سنتحكم به بالماوس */
+}
 
-        .gold-icon {
-            width: 24px;
-            height: 24px;
-        }
+/* أرضية الزنزانة */
+.floor {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 30%;
+  background: linear-gradient(180deg, 
+    rgba(30,20,15,0.9) 0%, 
+    rgba(50,30,20,0.95) 40%, 
+    rgba(20,10,5,1) 100%);
+  transform: rotateX(60deg) translateZ(-80px);
+  transform-origin: bottom center;
+  box-shadow: inset 0 0 100px rgba(0,0,0,0.8);
+  border-top: 2px solid #3a2a1a;
+}
 
-        .cart-btn {
-            background: #4a2c1a;
-            border: 2px solid #b87333;
-            padding: 6px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: bold;
-            color: #ffd54f;
-            transition: 0.2s;
-            font-family: var(--pixel-font);
-            font-size: 16px;
-        }
-        .cart-btn:hover {
-            background: #6b4c2c;
-            border-color: #ffb300;
-        }
+/* جدار خلفي */
+.back-wall {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 80%;
+  height: 70%;
+  transform: translateX(-50%) translateZ(-300px) rotateY(0deg);
+  background: linear-gradient(180deg, #2c1e12 0%, #1a1008 100%);
+  border: 3px solid #4a3720;
+  box-shadow: 0 0 80px rgba(0,0,0,0.7) inset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: #d4af37;
+  text-shadow: 0 0 15px #ffaa00;
+  opacity: 0.8;
+  pointer-events: none;
+}
 
-        /* ========== منطقة اللعبة (Game World Island) ========== */
-        #game-container {
-            width: 100%;
-            max-width: 800px;
-            margin: 8px auto;
-            background: #1e3b1e;
-            border: 4px solid #4a7c3f;
-            box-shadow: inset 0 0 30px #000000aa, 0 0 0 8px #0a1f0a;
-            position: relative;
-            overflow: hidden;
-            height: 300px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+/* قواعد المنتجات (pedestals) */
+.pedestal {
+  position: absolute;
+  width: 160px;
+  height: 200px;
+  transform-style: preserve-3d;
+  cursor: pointer;
+  transition: transform 0.2s, filter 0.2s;
+  /* الموقع سيتم تحديده ديناميكياً عبر JS */
+}
 
-        #game-grid {
-            display: grid;
-            grid-template-columns: repeat(20, 1fr);
-            grid-template-rows: repeat(10, 1fr);
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-        }
+.pedestal:hover {
+  transform: translateZ(30px) scale(1.1);
+  filter: drop-shadow(0 0 15px gold);
+}
 
-        .grid-cell {
-            border: 1px solid #2c472c22;
-            background: #1f3b1f;
-            transition: background 0.1s;
-        }
-        .grid-cell.path {
-            background: #3e5d3e;
-        }
-        .grid-cell.treasure {
-            background: radial-gradient(circle, #b8860b, #8b6508);
-            border: 1px solid #ffd700;
-            box-shadow: 0 0 12px #ffb300;
-            animation: pulse 1.5s infinite alternate;
-        }
-        .grid-cell.player {
-            background: #4a90e2;
-            border: 2px solid #fff;
-            box-shadow: 0 0 10px #1e90ff;
-            z-index: 2;
-        }
+.product-card {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: linear-gradient(145deg, #3a2a1a, #1e140a);
+  border: 3px solid #6b4f2a;
+  border-radius: 8px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.7), inset 0 0 30px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  text-align: center;
+  transform-style: preserve-3d;
+}
 
-        @keyframes pulse {
-            from { opacity: 0.8; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1.05); }
-        }
+/* أيقونة SVG بسيطة لكل منتج */
+.product-icon {
+  width: 60px;
+  height: 60px;
+  margin-bottom: 10px;
+  filter: drop-shadow(0 0 8px #ffcc00);
+}
 
-        #player-sprite {
-            position: absolute;
-            font-size: 28px;
-            color: white;
-            text-shadow: 0 0 8px black;
-            pointer-events: none;
-            transition: all 0.15s steps(3);
-            z-index: 5;
-        }
+.product-name {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #f4e3b1;
+  text-shadow: 0 0 5px black;
+  margin-bottom: 5px;
+}
 
-        /* ========== جزيرة الحوار (Dialog Box Island) ========== */
-        #dialog-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: #000000cc;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 20;
-            backdrop-filter: blur(4px);
-        }
+.product-price {
+  font-size: 1.2rem;
+  color: var(--gold);
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 8px #daa520;
+}
 
-        #dialog-box {
-            background: var(--dialog-bg);
-            border: 4px solid #756b5a;
-            border-radius: 8px;
-            padding: 20px;
-            max-width: 400px;
-            width: 90%;
-            box-shadow: 0 0 25px #000;
-            font-family: var(--pixel-font);
-            color: #d4c9a3;
-            text-align: center;
-        }
+/* ---------- جزيرة HUD (واجهة المستخدم) ---------- */
+.hud {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 100;
+  pointer-events: none; /* نترك الأزرار تمرر الأحداث */
+}
 
-        .dialog-title {
-            font-size: 22px;
-            color: #ffd54f;
-            margin-bottom: 16px;
-        }
+.hud > * {
+  pointer-events: auto;
+}
 
-        .dialog-text {
-            font-size: 16px;
-            margin-bottom: 20px;
-            line-height: 1.6;
-        }
+.coins-display, .cart-btn, .network-status {
+  background: rgba(0,0,0,0.7);
+  border: 2px solid #6b4f2a;
+  color: var(--gold);
+  padding: 8px 20px;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  font-size: 1.2rem;
+  backdrop-filter: blur(5px);
+  border-radius: 8px;
+  text-shadow: 0 0 8px #ffaa00;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-        .dialog-buttons {
-            display: flex;
-            justify-content: center;
-            gap: 16px;
-        }
+.coins-display::before {
+  content: "🪙";
+  font-size: 1.5rem;
+}
 
-        .dialog-btn {
-            padding: 10px 24px;
-            font-family: var(--pixel-font);
-            background: #4a3f2e;
-            color: #ffecb3;
-            border: 2px solid #bca760;
-            cursor: pointer;
-            border-radius: 6px;
-            font-size: 16px;
-            transition: 0.2s;
-        }
-        .dialog-btn:hover {
-            background: #6b5d3e;
-            border-color: #ffd700;
-        }
+.cart-btn {
+  cursor: pointer;
+  background: rgba(212, 175, 55, 0.2);
+  transition: all 0.2s;
+}
+.cart-btn:hover {
+  background: rgba(212, 175, 55, 0.5);
+}
 
-        /* ========== قائمة المنتجات (Lazy Loaded Shop Items) ========== */
-        #shop-section {
-            width: 100%;
-            max-width: 800px;
-            margin: 16px auto;
-            padding: 0 16px;
-        }
+.network-status.offline {
+  color: #ff4444;
+  border-color: #ff4444;
+  text-shadow: 0 0 8px red;
+}
 
-        .items-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 12px;
-            margin-top: 8px;
-        }
+/* ---------- جزيرة تفاصيل المنتج (Modal) ---------- */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.85);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 200;
+  backdrop-filter: blur(3px);
+}
 
-        .item-card {
-            background: linear-gradient(145deg, #2a3a1e, #1a2810);
-            border: 3px solid #5a7d3a;
-            border-radius: 12px;
-            padding: 12px;
-            text-align: center;
-            cursor: pointer;
-            transition: transform 0.2s, border-color 0.2s;
-            box-shadow: 0 4px 10px #00000055;
-            contain: content; /* تحسين الأداء */
-        }
-        .item-card:hover {
-            transform: translateY(-4px);
-            border-color: #ffb300;
-        }
+.modal-overlay.active {
+  display: flex;
+}
 
-        .item-icon {
-            width: 64px;
-            height: 64px;
-            margin: 0 auto 8px;
-        }
+.modal {
+  background: linear-gradient(135deg, #2c1e12, #1a0f08);
+  border: 4px solid #b8942e;
+  border-radius: 15px;
+  padding: 30px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+  color: #f4e3b1;
+  box-shadow: 0 0 50px rgba(212,175,55,0.5);
+  transform-style: preserve-3d;
+  animation: modalPop 0.3s ease-out;
+}
 
-        .item-name {
-            font-weight: bold;
-            color: #ffd54f;
-            font-size: 16px;
-        }
+@keyframes modalPop {
+  from { transform: scale(0.8) translateZ(-100px); opacity: 0; }
+  to { transform: scale(1) translateZ(0); opacity: 1; }
+}
 
-        .item-price {
-            color: #ccc;
-            margin-top: 4px;
-        }
+.modal .product-icon-large {
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 15px;
+}
 
-        /* للتحميل الكسول */
-        .lazy-item {
-            opacity: 0;
-            transform: translateY(20px);
-            transition: opacity 0.4s, transform 0.4s;
-        }
-        .lazy-item.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
+.modal h2 {
+  font-size: 1.8rem;
+  margin-bottom: 10px;
+  text-shadow: 0 0 10px gold;
+}
 
-        /* ========== سلة التسوق ========== */
-        #cart-panel {
-            position: fixed;
-            top: 60px;
-            right: 20px;
-            background: #1e1e1ecc;
-            backdrop-filter: blur(10px);
-            border: 2px solid #b87333;
-            border-radius: 12px;
-            padding: 16px;
-            width: 260px;
-            max-height: 60vh;
-            overflow-y: auto;
-            z-index: 15;
-            display: none;
-            font-size: 14px;
-        }
-        .cart-item {
-            border-bottom: 1px solid #4a4a4a;
-            padding: 6px 0;
-            display: flex;
-            justify-content: space-between;
-        }
-    </style>
+.modal .description {
+  font-size: 0.9rem;
+  margin: 15px 0;
+  color: #ccc;
+}
+
+.modal .price-big {
+  font-size: 2rem;
+  color: var(--gold);
+  margin: 15px 0;
+}
+
+.add-to-cart-btn, .close-modal-btn {
+  background: linear-gradient(180deg, #b8942e, #7a5c1e);
+  border: none;
+  color: black;
+  font-weight: bold;
+  padding: 12px 30px;
+  margin: 5px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  border-radius: 8px;
+  text-transform: uppercase;
+  transition: 0.2s;
+}
+.add-to-cart-btn:hover {
+  background: linear-gradient(180deg, #d4af37, #9e7b2a);
+}
+
+.close-modal-btn {
+  background: #444;
+  color: white;
+}
+.close-modal-btn:hover {
+  background: #666;
+}
+
+/* ---------- جزيرة السلة الجانبية ---------- */
+.cart-panel {
+  position: fixed;
+  top: 0;
+  right: -320px;
+  width: 300px;
+  height: 100%;
+  background: rgba(20, 10, 5, 0.95);
+  border-left: 4px solid #b8942e;
+  z-index: 300;
+  transition: right 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(10px);
+  color: #f4e3b1;
+  padding: 20px;
+}
+
+.cart-panel.open {
+  right: 0;
+}
+
+.cart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #b8942e;
+  padding-bottom: 10px;
+}
+.cart-items-list {
+  flex: 1;
+  overflow-y: auto;
+  margin: 15px 0;
+}
+.cart-item {
+  display: flex;
+  justify-content: space-between;
+  margin: 10px 0;
+  font-size: 0.9rem;
+}
+.cart-total {
+  font-size: 1.3rem;
+  font-weight: bold;
+  border-top: 2px solid #b8942e;
+  padding-top: 10px;
+}
+.checkout-btn {
+  background: #d4af37;
+  color: black;
+  font-weight: bold;
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+}
+
+/* ---------- جزيرة التحميل ---------- */
+.loading-screen {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: #0a0604;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  transition: opacity 0.5s;
+}
+.loading-bar {
+  width: 200px;
+  height: 20px;
+  border: 3px solid #d4af37;
+  background: #222;
+  margin-top: 20px;
+}
+.loading-progress {
+  height: 100%;
+  width: 0%;
+  background: #d4af37;
+  transition: width 0.2s;
+}
+</style>
 </head>
 <body>
 
-    <!-- ========== جزيرة شريط الحالة (Status Bar) ========== -->
-    <div id="status-bar">
-        <div class="gold-display">
-            <svg class="gold-icon" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" fill="#ffd700" stroke="#b8860b" stroke-width="2"/>
-                <text x="12" y="17" text-anchor="middle" font-size="14" fill="#000" font-weight="bold">G</text>
-            </svg>
-            <span id="gold-amount">500</span>
-        </div>
-        <span style="font-weight:bold; color:#8bc34a;">⚔️ متجر المغامر</span>
-        <button class="cart-btn" id="toggle-cart-btn">🛒 السلة (<span id="cart-count">0</span>)</button>
-    </div>
+<!-- ========== جزيرة مشهد الـ 3D ========== -->
+<div class="scene-container" id="sceneContainer">
+  <div class="scene" id="scene">
+    <div class="floor"></div>
+    <div class="back-wall">⚔️ DUNGEON SHOP ⚔️</div>
+    <!-- سيتم إدراج قواعد المنتجات (pedestals) ديناميكياً عبر JS -->
+  </div>
+</div>
 
-    <!-- ========== جزيرة عالم اللعبة (Game World) ========== -->
-    <div id="game-container">
-        <div id="game-grid"></div>
-        <div id="player-sprite">🧝</div>
-    </div>
-    <div style="text-align:center; margin:4px; color:#8bc34a; font-size:14px;">
-        تحرك باستخدام الأسهم | اقترب من الصندوق للشراء
-    </div>
+<!-- ========== جزيرة HUD ========== -->
+<div class="hud">
+  <div class="coins-display" id="coinsDisplay">0</div>
+  <div class="cart-btn" id="cartBtn">🛒 السلة (<span id="cartCount">0</span>)</div>
+  <div class="network-status" id="networkStatus">⛓️ متصل</div>
+</div>
 
-    <!-- ========== جزيرة المنتجات (Lazy Loaded Shop Section) ========== -->
-    <div id="shop-section">
-        <h2 style="color:#ffd54f; border-bottom:2px solid #4a7c3f; padding-bottom:6px;">📦 الكنوز المتاحة</h2>
-        <div class="items-grid" id="items-container"></div>
-    </div>
+<!-- ========== جزيرة تفاصيل المنتج (Modal) ========== -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="product-icon-large" id="modalIcon"></div>
+    <h2 id="modalName"></h2>
+    <p class="description" id="modalDesc"></p>
+    <div class="price-big" id="modalPrice"></div>
+    <button class="add-to-cart-btn" id="modalAddToCart">🛒 أضف إلى السلة</button>
+    <button class="close-modal-btn" id="modalClose">إغلاق</button>
+  </div>
+</div>
 
-    <!-- ========== جزيرة مربع الحوار (Dialog Box) ========== -->
-    <div id="dialog-overlay">
-        <div id="dialog-box">
-            <div class="dialog-title" id="dialog-title">عنوان</div>
-            <div class="dialog-text" id="dialog-text">تفاصيل</div>
-            <div class="dialog-buttons" id="dialog-buttons"></div>
-        </div>
-    </div>
+<!-- ========== جزيرة السلة الجانبية ========== -->
+<div class="cart-panel" id="cartPanel">
+  <div class="cart-header">
+    <h3>🎒 حقيبة المغامر</h3>
+    <button class="close-modal-btn" id="closeCartBtn">✖</button>
+  </div>
+  <div class="cart-items-list" id="cartItemsList"></div>
+  <div class="cart-total">المجموع: <span id="cartTotal">0</span> 🪙</div>
+  <button class="checkout-btn" id="checkoutBtn">شراء (محاكاة)</button>
+</div>
 
-    <!-- ========== سلة التسوق المنبثقة ========== -->
-    <div id="cart-panel">
-        <h3 style="color:#ffd54f; margin-bottom:12px;">🛒 سلة المشتريات</h3>
-        <div id="cart-items-list"></div>
-        <button class="dialog-btn" id="checkout-btn" style="width:100%; margin-top:12px;">إرسال الطلب</button>
-    </div>
+<!-- ========== جزيرة التحميل ========== -->
+<div class="loading-screen" id="loadingScreen">
+  <h1 style="color:#d4af37; text-shadow:0 0 20px;">⚔️ جارٍ دخول الزنزانة ⚔️</h1>
+  <div class="loading-bar"><div class="loading-progress" id="loadingProgress"></div></div>
+</div>
 
-    <script>
-        /* ====================== التخزين المؤقت وإدارة الحالة (Global State) ====================== */
-        const STORAGE_KEYS = {
-            GOLD: 'hero_gold',
-            CART: 'hero_cart',
-            ORDERS: 'pending_orders',
-            PRODUCTS_CACHE: 'cached_products',
-            PRODUCTS_TIMESTAMP: 'products_ts'
-        };
+<script>
+// ======================== المنطق البرمجي الرئيسي ========================
+// جميع الجزر تتعامل مع بعضها عبر كائن State مركزي
 
-        // بيانات افتراضية (يتم استبدالها عند جلب Sheets بنجاح)
-        const DEFAULT_PRODUCTS = [
-            { id: 1, name: 'سيف خشبي', price: 100, desc: 'سيف تدريبي للبداية.', icon: '🗡️' },
-            { id: 2, name: 'درع حديدي', price: 250, desc: 'حماية متوسطة.', icon: '🛡️' },
-            { id: 3, name: 'جرعة صحة', price: 50, desc: 'يعيد 50 نقطة صحة.', icon: '🧪' },
-            { id: 4, name: 'خاتم القوة', price: 400, desc: 'يزيد القوة بنسبة 10%.', icon: '💍' },
-            { id: 5, name: 'قوس الصياد', price: 300, desc: 'دقة عالية.', icon: '🏹' },
-            { id: 6, name: 'درع التنين', price: 800, desc: 'أقوى درع.', icon: '🛡️' }
-        ];
+// ---------- بيانات البيئة والتكوين ----------
+const CONFIG = {
+  // استبدل هذا الرابط برابط تطبيق Google Apps Script الخاص بك بعد نشره
+  GOOGLE_SHEETS_API_URL: 'https://script.google.com/macros/s/AKfycbw7xX6pL3kQN2vY9z1R5tFgH8jK4dM0aWxQyZ6bV2cL/exec', // مثال، غير صالح
+  CACHE_KEY_PRODUCTS: 'dungeon_shop_products',
+  CACHE_KEY_CART: 'dungeon_shop_cart',
+  CACHE_KEY_COINS: 'dungeon_shop_coins',
+  FALLBACK_PRODUCTS: [
+    { id: 1, name: 'سيف التنين', realName: 'فأرة ألعاب RGB', price: 150, category: 'أسلحة', icon: '🗡️' },
+    { id: 2, name: 'درع الظلام', realName: 'سماعة رأس احترافية', price: 220, category: 'دروع', icon: '🎧' },
+    { id: 3, name: 'قوس النور', realName: 'لوحة مفاتيح ميكانيكية', price: 180, category: 'أسلحة', icon: '⌨️' },
+    { id: 4, name: 'زجاجة مانا', realName: 'مشروب طاقة', price: 15, category: 'جرعات', icon: '🧪' },
+    { id: 5, name: 'خاتم الاختفاء', realName: 'قميص جيمر أسود', price: 75, category: 'قطع أثرية', icon: '👕' },
+    { id: 6, name: 'كرة النار', realName: 'مكبر صوت بلوتوث', price: 95, category: 'أسلحة', icon: '🔊' }
+  ],
+  PRODUCTS_PER_VIEW: 6
+};
 
-        // حالة المستخدم
-        let playerGold = parseInt(localStorage.getItem(STORAGE_KEYS.GOLD)) || 500;
-        let cart = JSON.parse(localStorage.getItem(STORAGE_KEYS.CART)) || [];
-        let products = [];
+// ---------- إدارة الحالة العامة ----------
+const state = {
+  products: [],
+  cart: [],
+  coins: 0,
+  isOnline: navigator.onLine,
+  isLoading: true,
+  currentView: 0 // فهرس الصفحة للمنتجات المعروضة
+};
 
-        // عنوان Google Apps Script (يُضبط بعد النشر)
-        const GOOGLE_SCRIPT_URL = localStorage.getItem('gs_script_url') || ''; 
+// ---------- دوال التخزين المؤقت ----------
+const Storage = {
+  get(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch(e) { return fallback; }
+  },
+  set(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch(e) {}
+  }
+};
 
-        // تحديث واجهة المستخدم
-        function updateUI() {
-            document.getElementById('gold-amount').textContent = playerGold;
-            document.getElementById('cart-count').textContent = cart.length;
-            localStorage.setItem(STORAGE_KEYS.GOLD, playerGold);
-            localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(cart));
-        }
+// ---------- محاكاة عملات اللعبة ----------
+function initCoins() {
+  state.coins = Storage.get(CONFIG.CACHE_KEY_COINS, 500); // يبدأ اللاعب بـ 500 عملة
+  updateCoinsDisplay();
+}
+function addCoins(amount) {
+  state.coins += amount;
+  Storage.set(CONFIG.CACHE_KEY_COINS, state.coins);
+  updateCoinsDisplay();
+}
+function deductCoins(amount) {
+  if (state.coins >= amount) {
+    state.coins -= amount;
+    Storage.set(CONFIG.CACHE_KEY_COINS, state.coins);
+    updateCoinsDisplay();
+    return true;
+  }
+  return false;
+}
 
-        /* ====================== جزيرة إدارة المنتجات مع التخزين المؤقت ====================== */
-        async function loadProducts() {
-            const cached = localStorage.getItem(STORAGE_KEYS.PRODUCTS_CACHE);
-            const ts = localStorage.getItem(STORAGE_KEYS.PRODUCTS_TIMESTAMP);
-            const now = Date.now();
-            const cacheExpiry = 60 * 60 * 1000; // ساعة واحدة لتوفير البيانات
+// ---------- تحديث واجهة HUD ----------
+function updateCoinsDisplay() {
+  document.getElementById('coinsDisplay').textContent = state.coins;
+}
+function updateCartBadge() {
+  const count = state.cart.reduce((sum, item) => sum + item.quantity, 0);
+  document.getElementById('cartCount').textContent = count;
+}
+function updateNetworkStatus() {
+  const el = document.getElementById('networkStatus');
+  if (state.isOnline) {
+    el.textContent = '⛓️ متصل';
+    el.classList.remove('offline');
+  } else {
+    el.textContent = '⚠️ غير متصل';
+    el.classList.add('offline');
+  }
+}
 
-            if (cached && ts && (now - parseInt(ts)) < cacheExpiry) {
-                products = JSON.parse(cached);
-                console.log('محمل من التخزين المحلي');
-                renderShopItems();
-                return;
-            }
+// ---------- جلب المنتجات من Google Sheets مع تخزين مؤقت ----------
+async function fetchProducts() {
+  // محاولة استخدام البيانات المخزنة محلياً أولاً (تحميل فوري)
+  const cached = Storage.get(CONFIG.CACHE_KEY_PRODUCTS, null);
+  if (cached) {
+    state.products = cached;
+    renderProducts();
+    finishLoading();
+  }
 
-            // محاولة الجلب من Google Sheets إن وجد الرابط
-            if (GOOGLE_SCRIPT_URL) {
-                try {
-                    const resp = await fetch(`${GOOGLE_SCRIPT_URL}?action=getProducts`);
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        if (data && data.length) {
-                            products = data;
-                            localStorage.setItem(STORAGE_KEYS.PRODUCTS_CACHE, JSON.stringify(products));
-                            localStorage.setItem(STORAGE_KEYS.PRODUCTS_TIMESTAMP, now.toString());
-                            console.log('من Google Sheets');
-                            renderShopItems();
-                            return;
-                        }
-                    }
-                } catch (e) {
-                    console.warn('تعذر الاتصال بـ Google Sheets، استخدام المحلي', e);
-                }
-            }
+  // في الخلفية، جلب آخر التحديثات إن كان متصلاً
+  if (state.isOnline) {
+    try {
+      const response = await fetch(CONFIG.GOOGLE_SHEETS_API_URL);
+      if (!response.ok) throw new Error('Network response was not ok');
+      const data = await response.json();
+      if (data && data.length > 0) {
+        state.products = data;
+        Storage.set(CONFIG.CACHE_KEY_PRODUCTS, data);
+        if (cached) renderProducts(); // إعادة العرض إذا اختلفت
+        else renderProducts();
+      }
+    } catch (err) {
+      console.warn('فشل جلب البيانات من Google Sheets، استخدام المحلي:', err);
+      if (!state.products.length) {
+        // لا بيانات مخزنة، استخدم البيانات الافتراضية
+        state.products = CONFIG.FALLBACK_PRODUCTS;
+        renderProducts();
+      }
+    }
+  } else {
+    // بدون اتصال، اعرض المخزن محلياً أو الافتراضي
+    if (!state.products.length) {
+      state.products = CONFIG.FALLBACK_PRODUCTS;
+      renderProducts();
+    }
+  }
+  finishLoading();
+}
 
-            // استخدام البيانات الافتراضية
-            products = DEFAULT_PRODUCTS;
-            localStorage.setItem(STORAGE_KEYS.PRODUCTS_CACHE, JSON.stringify(products));
-            localStorage.setItem(STORAGE_KEYS.PRODUCTS_TIMESTAMP, now.toString());
-            renderShopItems();
-        }
+function finishLoading() {
+  state.isLoading = false;
+  document.getElementById('loadingScreen').style.opacity = '0';
+  setTimeout(() => {
+    document.getElementById('loadingScreen').style.display = 'none';
+  }, 500);
+}
 
-        /* ====================== عرض المنتجات مع Lazy Loading ====================== */
-        function renderShopItems() {
-            const container = document.getElementById('items-container');
-            container.innerHTML = '';
-            products.forEach((product, index) => {
-                const card = document.createElement('div');
-                card.className = 'item-card lazy-item';
-                card.setAttribute('data-id', product.id);
-                card.innerHTML = `
-                    <div class="item-icon">${product.icon || '📦'}</div>
-                    <div class="item-name">${product.name}</div>
-                    <div class="item-price">💰 ${product.price} ذهب</div>
-                `;
-                card.addEventListener('click', () => openShopDialog(product));
-                container.appendChild(card);
-            });
+// ---------- عرض المنتجات في مشهد 3D ----------
+const scene = document.getElementById('scene');
+let pedestals = [];
 
-            // تفعيل Intersection Observer للتحميل الكسول
-            const lazyCards = document.querySelectorAll('.lazy-item');
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.classList.add('visible');
-                        observer.unobserve(entry.target);
-                    }
-                });
-            }, { threshold: 0.1 });
+function renderProducts() {
+  // إزالة القواعد القديمة
+  pedestals.forEach(p => p.remove());
+  pedestals = [];
 
-            lazyCards.forEach(card => observer.observe(card));
-        }
+  // اختيار مجموعة المنتجات حسب الصفحة الحالية
+  const start = state.currentView * CONFIG.PRODUCTS_PER_VIEW;
+  const subset = state.products.slice(start, start + CONFIG.PRODUCTS_PER_VIEW);
+  if (subset.length === 0) return;
 
-        /* ====================== نظام الحوار (Dialog System) ====================== */
-        function openShopDialog(product) {
-            document.getElementById('dialog-title').textContent = product.name;
-            document.getElementById('dialog-text').innerHTML = `
-                ${product.desc || 'منتج نادر'}<br>
-                <span style="color:#ffd700;">السعر: ${product.price} ذهب</span>
-            `;
-            const btnsDiv = document.getElementById('dialog-buttons');
-            btnsDiv.innerHTML = '';
-            
-            const buyBtn = document.createElement('button');
-            buyBtn.className = 'dialog-btn';
-            buyBtn.textContent = 'شراء';
-            buyBtn.addEventListener('click', () => {
-                if (playerGold >= product.price) {
-                    playerGold -= product.price;
-                    cart.push({...product});
-                    updateUI();
-                    closeDialog();
-                    // تأثير صوتي بسيط
-                    playSound('coin');
-                    alert(`✅ تم شراء ${product.name}!`);
-                } else {
-                    alert('❌ الذهب غير كافٍ!');
-                }
-            });
+  // حساب إحداثيات ثلاثية الأبعاد بشكل دائري أو شبكي
+  const radius = 250;
+  const angleStep = (Math.PI * 2) / subset.length;
+  
+  subset.forEach((product, index) => {
+    const angle = angleStep * index - Math.PI/2; // نبدأ من الأعلى
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius - 100; // للخلف قليلاً
+    const y = -20; // ارتفاع القاعدة
 
-            const cancelBtn = document.createElement('button');
-            cancelBtn.className = 'dialog-btn';
-            cancelBtn.textContent = 'إلغاء';
-            cancelBtn.addEventListener('click', closeDialog);
+    const pedestal = document.createElement('div');
+    pedestal.className = 'pedestal';
+    pedestal.style.left = '50%';
+    pedestal.style.top = '50%';
+    pedestal.style.transform = `translate3d(${x}px, ${y}px, ${z}px)`;
+    pedestal.dataset.productId = product.id;
+    pedestal.innerHTML = `
+      <div class="product-card">
+        <div class="product-icon">${product.icon || '📦'}</div>
+        <div class="product-name">${product.name}</div>
+        <div class="product-price">${product.price} 🪙</div>
+      </div>
+    `;
+    pedestal.addEventListener('click', () => openProductModal(product));
+    scene.appendChild(pedestal);
+    pedestals.push(pedestal);
+  });
+}
 
-            btnsDiv.appendChild(buyBtn);
-            btnsDiv.appendChild(cancelBtn);
-            document.getElementById('dialog-overlay').style.display = 'flex';
-        }
+// ---------- جزيرة التحكم بالماوس (دوران المشهد 3D) ----------
+const sceneContainer = document.getElementById('sceneContainer');
+let mouseX = 0, mouseY = 0;
+let targetRotX = 0, targetRotY = 0;
+let currentRotX = 0, currentRotY = 0;
 
-        function closeDialog() {
-            document.getElementById('dialog-overlay').style.display = 'none';
-        }
+sceneContainer.addEventListener('mousemove', (e) => {
+  const rect = sceneContainer.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  // تحويل الإحداثيات إلى زوايا (نطاق -15 إلى 15 درجة مثلاً)
+  targetRotY = ((x / rect.width) - 0.5) * 20;
+  targetRotX = ((y / rect.height) - 0.5) * -10;
+});
 
-        /* ====================== نظام الصوتيات عبر Web Audio API ====================== */
-        function playSound(type) {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            if (type === 'coin') {
-                osc.frequency.setValueAtTime(800, ctx.currentTime);
-                osc.frequency.linearRampToValueAtTime(1200, ctx.currentTime + 0.1);
-                gain.gain.setValueAtTime(0.3, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
-                osc.start(ctx.currentTime);
-                osc.stop(ctx.currentTime + 0.2);
-            } else if (type === 'step') {
-                osc.frequency.setValueAtTime(200, ctx.currentTime);
-                gain.gain.setValueAtTime(0.1, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-                osc.start(ctx.currentTime);
-                osc.stop(ctx.currentTime + 0.1);
-            }
-        }
+// للأجهزة اللمسية
+sceneContainer.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  const touch = e.touches[0];
+  const rect = sceneContainer.getBoundingClientRect();
+  const x = touch.clientX - rect.left;
+  const y = touch.clientY - rect.top;
+  targetRotY = ((x / rect.width) - 0.5) * 20;
+  targetRotX = ((y / rect.height) - 0.5) * -10;
+}, { passive: false });
 
-        /* ====================== عالم اللعبة (Game World) ====================== */
-        const ROWS = 10, COLS = 20;
-        let playerPos = { x: 2, y: 5 }; // موقع اللاعب داخل الشبكة
-        const treasurePositions = [
-            { x: 6, y: 2 }, { x: 13, y: 3 }, { x: 16, y: 7 }, { x: 8, y: 8 }
-        ];
-        let currentTreasureIndex = null;
+// حلقة التحديث للحركة السلسة
+function animateScene() {
+  // تقريب تدريجي (LERP)
+  currentRotY += (targetRotY - currentRotY) * 0.1;
+  currentRotX += (targetRotX - currentRotX) * 0.1;
+  scene.style.transform = `rotateX(${currentRotX}deg) rotateY(${currentRotY}deg)`;
+  requestAnimationFrame(animateScene);
+}
+animateScene();
 
-        function buildGameGrid() {
-            const grid = document.getElementById('game-grid');
-            grid.innerHTML = '';
-            for (let r = 0; r < ROWS; r++) {
-                for (let c = 0; c < COLS; c++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'grid-cell';
-                    if ((r + c) % 2 === 0) cell.classList.add('path');
-                    // تعيين الكنوز
-                    if (treasurePositions.some(p => p.x === c && p.y === r)) {
-                        cell.classList.add('treasure');
-                    }
-                    cell.dataset.x = c;
-                    cell.dataset.y = r;
-                    grid.appendChild(cell);
-                }
-            }
-            updatePlayerVisual();
-        }
+// ---------- جزيرة تفاصيل المنتج ----------
+const modalOverlay = document.getElementById('modalOverlay');
+let currentModalProduct = null;
 
-        function updatePlayerVisual() {
-            const playerDiv = document.getElementById('player-sprite');
-            const cellSize = document.getElementById('game-grid').clientWidth / COLS;
-            playerDiv.style.left = (playerPos.x * cellSize) + 'px';
-            playerDiv.style.top = (playerPos.y * cellSize) + 'px';
-            // كشف القرب من كنز
-            const nearTreasure = treasurePositions.findIndex(t => 
-                Math.abs(t.x - playerPos.x) <= 1 && Math.abs(t.y - playerPos.y) <= 1
-            );
-            if (nearTreasure !== -1 && currentTreasureIndex !== nearTreasure) {
-                currentTreasureIndex = nearTreasure;
-                // عرض المنتج المرتبط (نأخذ منتج حسب الترتيب)
-                if (products.length > nearTreasure) {
-                    openShopDialog(products[nearTreasure]);
-                }
-            } else if (nearTreasure === -1) {
-                currentTreasureIndex = null;
-            }
-        }
+function openProductModal(product) {
+  currentModalProduct = product;
+  document.getElementById('modalIcon').innerHTML = product.icon || '📦';
+  document.getElementById('modalName').textContent = product.name;
+  document.getElementById('modalDesc').textContent = product.realName || 'منتج مادي بجودة أسطورية';
+  document.getElementById('modalPrice').textContent = `${product.price} 🪙`;
+  modalOverlay.classList.add('active');
+}
 
-        function movePlayer(dx, dy) {
-            const newX = playerPos.x + dx;
-            const newY = playerPos.y + dy;
-            if (newX >= 0 && newX < COLS && newY >= 0 && newY < ROWS) {
-                playerPos.x = newX;
-                playerPos.y = newY;
-                updatePlayerVisual();
-                playSound('step');
-            }
-        }
+function closeModal() {
+  modalOverlay.classList.remove('active');
+  currentModalProduct = null;
+}
 
-        /* ====================== أحداث لوحة المفاتيح ====================== */
-        window.addEventListener('keydown', (e) => {
-            if (document.getElementById('dialog-overlay').style.display === 'flex') return;
-            switch(e.key) {
-                case 'ArrowRight': movePlayer(1, 0); e.preventDefault(); break;
-                case 'ArrowLeft': movePlayer(-1, 0); e.preventDefault(); break;
-                case 'ArrowUp': movePlayer(0, -1); e.preventDefault(); break;
-                case 'ArrowDown': movePlayer(0, 1); e.preventDefault(); break;
-            }
-        });
+document.getElementById('modalClose').addEventListener('click', closeModal);
+modalOverlay.addEventListener('click', (e) => {
+  if (e.target === modalOverlay) closeModal();
+});
 
-        /* ====================== سلة التسوق وإرسال الطلب ====================== */
-        function renderCart() {
-            const list = document.getElementById('cart-items-list');
-            list.innerHTML = '';
-            if (cart.length === 0) {
-                list.innerHTML = '<p style="color:#aaa;">السلة فارغة</p>';
-                return;
-            }
-            cart.forEach((item, idx) => {
-                const div = document.createElement('div');
-                div.className = 'cart-item';
-                div.innerHTML = `${item.icon} ${item.name} - ${item.price} ذهب <button data-idx="${idx}" class="remove-item" style="background:#a33; border:none; color:white; cursor:pointer;">×</button>`;
-                list.appendChild(div);
-            });
-            document.querySelectorAll('.remove-item').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const idx = parseInt(e.target.dataset.idx);
-                    playerGold += cart[idx].price;
-                    cart.splice(idx, 1);
-                    updateUI();
-                    renderCart();
-                });
-            });
-        }
+// إضافة إلى السلة من النافذة
+document.getElementById('modalAddToCart').addEventListener('click', () => {
+  if (currentModalProduct) {
+    addToCart(currentModalProduct);
+    closeModal();
+  }
+});
 
-        document.getElementById('toggle-cart-btn').addEventListener('click', () => {
-            const panel = document.getElementById('cart-panel');
-            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-            renderCart();
-        });
+// ---------- إدارة السلة ----------
+function loadCart() {
+  state.cart = Storage.get(CONFIG.CACHE_KEY_CART, []);
+  updateCartBadge();
+}
 
-        document.getElementById('checkout-btn').addEventListener('click', async () => {
-            if (cart.length === 0) {
-                alert('السلة فارغة!');
-                return;
-            }
-            const order = {
-                items: cart.map(i => ({ id: i.id, name: i.name, price: i.price })),
-                total: cart.reduce((sum, i) => sum + i.price, 0),
-                timestamp: new Date().toISOString(),
-                customer: prompt('أدخل اسمك للشحن:') || 'مغامر مجهول'
-            };
+function saveCart() {
+  Storage.set(CONFIG.CACHE_KEY_CART, state.cart);
+  updateCartBadge();
+}
 
-            // حفظ محلياً دائماً
-            let pendingOrders = JSON.parse(localStorage.getItem(STORAGE_KEYS.ORDERS) || '[]');
-            pendingOrders.push(order);
-            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(pendingOrders));
+function addToCart(product) {
+  const existing = state.cart.find(item => item.id === product.id);
+  if (existing) {
+    existing.quantity++;
+  } else {
+    state.cart.push({ ...product, quantity: 1 });
+  }
+  saveCart();
+  showFloatingMessage(`تمت إضافة ${product.name} إلى الحقيبة!`);
+}
 
-            // محاولة إرسال إلى Google Sheets إذا توفر الرابط
-            if (GOOGLE_SCRIPT_URL) {
-                try {
-                    const resp = await fetch(GOOGLE_SCRIPT_URL, {
-                        method: 'POST',
-                        body: JSON.stringify({ action: 'addOrder', order: order }),
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                    if (resp.ok) alert('✅ تم إرسال الطلب بنجاح وحفظه في قاعدة البيانات!');
-                    else throw new Error('فشل الإرسال');
-                } catch (e) {
-                    alert('⚠️ تعذر الإرسال للخادم، الطلب محفوظ محلياً وسيحاول لاحقاً.');
-                }
-            } else {
-                alert('📋 الطلب مسجل محلياً. قم بإعداد Google Apps Script للمزامنة.');
-            }
+function removeFromCart(productId) {
+  state.cart = state.cart.filter(item => item.id !== productId);
+  saveCart();
+  renderCartItems();
+}
 
-            // إفراغ السلة
-            cart = [];
-            updateUI();
-            renderCart();
-            document.getElementById('cart-panel').style.display = 'none';
-        });
+// عرض السلة الجانبية
+const cartPanel = document.getElementById('cartPanel');
+document.getElementById('cartBtn').addEventListener('click', () => {
+  cartPanel.classList.toggle('open');
+  renderCartItems();
+});
+document.getElementById('closeCartBtn').addEventListener('click', () => {
+  cartPanel.classList.remove('open');
+});
 
-        /* ====================== التهيئة الأولية ====================== */
-        window.addEventListener('load', () => {
-            buildGameGrid();
-            updateUI();
-            loadProducts();
-            // محاولة إعادة إرسال الطلبات المعلقة عند الاتصال
-            if (GOOGLE_SCRIPT_URL && localStorage.getItem(STORAGE_KEYS.ORDERS)) {
-                const pending = JSON.parse(localStorage.getItem(STORAGE_KEYS.ORDERS));
-                if (pending.length) {
-                    // يمكن إضافة آلية إعادة إرسال تلقائية هنا
-                }
-            }
-        });
+function renderCartItems() {
+  const list = document.getElementById('cartItemsList');
+  list.innerHTML = '';
+  state.cart.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'cart-item';
+    div.innerHTML = `
+      <span>${item.icon} ${item.name} x${item.quantity}</span>
+      <span>${item.price * item.quantity} 🪙</span>
+      <button class="close-modal-btn" style="padding:0 5px;" data-id="${item.id}">✖</button>
+    `;
+    div.querySelector('button').addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeFromCart(item.id);
+    });
+    list.appendChild(div);
+  });
+  const total = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  document.getElementById('cartTotal').textContent = total;
+}
 
-        window.addEventListener('resize', () => {
-            updatePlayerVisual();
-        });
-    </script>
+// زر الدفع الوهمي
+document.getElementById('checkoutBtn').addEventListener('click', () => {
+  const total = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  if (total === 0) return alert('حقيبتك فارغة!');
+  if (deductCoins(total)) {
+    alert(`لقد اشتريت الأغراض بقيمة ${total} عملة! (محاكاة)`);
+    state.cart = [];
+    saveCart();
+    renderCartItems();
+    cartPanel.classList.remove('open');
+  } else {
+    alert('ليس لديك عملات كافية! أكمل المهام لتربح المزيد.');
+  }
+});
+
+// رسالة عائمة
+function showFloatingMessage(text) {
+  const msg = document.createElement('div');
+  msg.style.position = 'fixed';
+  msg.style.bottom = '20px';
+  msg.style.left = '50%';
+  msg.style.transform = 'translateX(-50%)';
+  msg.style.background = '#d4af37';
+  msg.style.color = 'black';
+  msg.style.padding = '10px 25px';
+  msg.style.borderRadius = '20px';
+  msg.style.fontWeight = 'bold';
+  msg.style.zIndex = '500';
+  msg.textContent = text;
+  document.body.appendChild(msg);
+  setTimeout(() => msg.remove(), 2000);
+}
+
+// ---------- إدارة حالة الشبكة ----------
+window.addEventListener('online', () => {
+  state.isOnline = true;
+  updateNetworkStatus();
+  fetchProducts(); // تحديث فوري
+});
+window.addEventListener('offline', () => {
+  state.isOnline = false;
+  updateNetworkStatus();
+});
+
+// ---------- محاكاة تحميل تدريجي (للمظهر فقط) ----------
+let loadProgress = 0;
+const progressBar = document.getElementById('loadingProgress');
+function simulateLoading() {
+  if (loadProgress < 100) {
+    loadProgress += Math.random() * 15;
+    if (loadProgress > 100) loadProgress = 100;
+    progressBar.style.width = loadProgress + '%';
+    setTimeout(simulateLoading, 200);
+  }
+}
+simulateLoading();
+
+// ---------- بدء التشغيل ----------
+async function init() {
+  updateNetworkStatus();
+  loadCart();
+  initCoins();
+  await fetchProducts(); // هذا سينهي التحميل عند الجلب أو استخدام الكاش
+  // إذا لم تنته fetchProducts بسرعة، سننهي التحميل بعد 2.5 ثانية كحد أقصى
+  setTimeout(() => {
+    if (state.isLoading) finishLoading();
+  }, 2500);
+}
+
+init();
+</script>
+
 </body>
 </html>
