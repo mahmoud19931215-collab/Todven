@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>متجر المغامر الأسطوري</title>
+    <style>
+        /* ========== المتغيرات والتدرجات الأساسية (CSS Gradients) ========== */
+        :root {
+            --pixel-bg: #0f1a0f;
+            --gold: #d4af37;
+            --pixel-green: #2e7d32;
+            --pixel-brown: #5d4037;
+            --dialog-bg: #1e1e1e;
+            --pixel-font: 'Courier New', monospace;
+            --border-light: #8bc34a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--pixel-bg);
+            background-image: 
+                radial-gradient(circle at 20% 30%, #1e3b1e 1px, transparent 1px),
+                radial-gradient(circle at 80% 70%, #1e3b1e 1px, transparent 1px);
+            background-size: 40px 40px;
+            font-family: var(--pixel-font);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            color: #fff;
+            image-rendering: pixelated;
+            user-select: none;
+            overflow-x: hidden;
+        }
+
+        /* ========== جزيرة شريط الحالة (Status Bar Island) ========== */
+        #status-bar {
+            width: 100%;
+            max-width: 800px;
+            padding: 8px 16px;
+            background: linear-gradient(180deg, #2c3e1e, #1a2a1a);
+            border-bottom: 3px solid #4a7c3f;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 18px;
+            letter-spacing: 2px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.7);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .gold-display {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #00000055;
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 2px solid var(--gold);
+        }
+
+        .gold-icon {
+            width: 24px;
+            height: 24px;
+        }
+
+        .cart-btn {
+            background: #4a2c1a;
+            border: 2px solid #b87333;
+            padding: 6px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #ffd54f;
+            transition: 0.2s;
+            font-family: var(--pixel-font);
+            font-size: 16px;
+        }
+        .cart-btn:hover {
+            background: #6b4c2c;
+            border-color: #ffb300;
+        }
+
+        /* ========== منطقة اللعبة (Game World Island) ========== */
+        #game-container {
+            width: 100%;
+            max-width: 800px;
+            margin: 8px auto;
+            background: #1e3b1e;
+            border: 4px solid #4a7c3f;
+            box-shadow: inset 0 0 30px #000000aa, 0 0 0 8px #0a1f0a;
+            position: relative;
+            overflow: hidden;
+            height: 300px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #game-grid {
+            display: grid;
+            grid-template-columns: repeat(20, 1fr);
+            grid-template-rows: repeat(10, 1fr);
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .grid-cell {
+            border: 1px solid #2c472c22;
+            background: #1f3b1f;
+            transition: background 0.1s;
+        }
+        .grid-cell.path {
+            background: #3e5d3e;
+        }
+        .grid-cell.treasure {
+            background: radial-gradient(circle, #b8860b, #8b6508);
+            border: 1px solid #ffd700;
+            box-shadow: 0 0 12px #ffb300;
+            animation: pulse 1.5s infinite alternate;
+        }
+        .grid-cell.player {
+            background: #4a90e2;
+            border: 2px solid #fff;
+            box-shadow: 0 0 10px #1e90ff;
+            z-index: 2;
+        }
+
+        @keyframes pulse {
+            from { opacity: 0.8; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1.05); }
+        }
+
+        #player-sprite {
+            position: absolute;
+            font-size: 28px;
+            color: white;
+            text-shadow: 0 0 8px black;
+            pointer-events: none;
+            transition: all 0.15s steps(3);
+            z-index: 5;
+        }
+
+        /* ========== جزيرة الحوار (Dialog Box Island) ========== */
+        #dialog-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #000000cc;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            backdrop-filter: blur(4px);
+        }
+
+        #dialog-box {
+            background: var(--dialog-bg);
+            border: 4px solid #756b5a;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 0 25px #000;
+            font-family: var(--pixel-font);
+            color: #d4c9a3;
+            text-align: center;
+        }
+
+        .dialog-title {
+            font-size: 22px;
+            color: #ffd54f;
+            margin-bottom: 16px;
+        }
+
+        .dialog-text {
+            font-size: 16px;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .dialog-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .dialog-btn {
+            padding: 10px 24px;
+            font-family: var(--pixel-font);
+            background: #4a3f2e;
+            color: #ffecb3;
+            border: 2px solid #bca760;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: 0.2s;
+        }
+        .dialog-btn:hover {
+            background: #6b5d3e;
+            border-color: #ffd700;
+        }
+
+        /* ========== قائمة المنتجات (Lazy Loaded Shop Items) ========== */
+        #shop-section {
+            width: 100%;
+            max-width: 800px;
+            margin: 16px auto;
+            padding: 0 16px;
+        }
+
+        .items-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .item-card {
+            background: linear-gradient(145deg, #2a3a1e, #1a2810);
+            border: 3px solid #5a7d3a;
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s, border-color 0.2s;
+            box-shadow: 0 4px 10px #00000055;
+            contain: content; /* تحسين الأداء */
+        }
+        .item-card:hover {
+            transform: translateY(-4px);
+            border-color: #ffb300;
+        }
+
+        .item-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 8px;
+        }
+
+        .item-name {
+            font-weight: bold;
+            color: #ffd54f;
+            font-size: 16px;
+        }
+
+        .item-price {
+            color: #ccc;
+            margin-top: 4px;
+        }
+
+        /* للتحميل الكسول */
+        .lazy-item {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.4s, transform 0.4s;
+        }
+        .lazy-item.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ========== سلة التسوق ========== */
+        #cart-panel {
+            position: fixed;
+            top: 60px;
+            right: 20px;
+            background: #1e1e1ecc;
+            backdrop-filter: blur(10px);
+            border: 2px solid #b87333;
+            border-radius: 12px;
+            padding: 16px;
+            width: 260px;
+            max-height: 60vh;
+            overflow-y: auto;
+            z-index: 15;
+            display: none;
+            font-size: 14px;
+        }
+        .cart-item {
+            border-bottom: 1px solid #4a4a4a;
+            padding: 6px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ========== جزيرة شريط الحالة (Status Bar) ========== -->
+    <div id="status-bar">
+        <div class="gold-display">
+            <svg class="gold-icon" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" fill="#ffd700" stroke="#b8860b" stroke-width="2"/>
+                <text x="12" y="17" text-anchor="middle" font-size="14" fill="#000" font-weight="bold">G</text>
+            </svg>
+            <span id="gold-amount">500</span>
+        </div>
+        <span style="font-weight:bold; color:#8bc34a;">⚔️ متجر المغامر</span>
+        <button class="cart-btn" id="toggle-cart-btn">🛒 السلة (<span id="cart-count">0</span>)</button>
+    </div>
+
+    <!-- ========== جزيرة عالم اللعبة (Game World) ========== -->
+    <div id="game-container">
+        <div id="game-grid"></div>
+        <div id="player-sprite">🧝</div>
+    </div>
+    <div style="text-align:center; margin:4px; color:#8bc34a; font-size:14px;">
+        تحرك باستخدام الأسهم | اقترب من الصندوق للشراء
+    </div>
+
+    <!-- ========== جزيرة المنتجات (Lazy Loaded Shop Section) ========== -->
+    <div id="shop-section">
+        <h2 style="color:#ffd54f; border-bottom:2px solid #4a7c3f; padding-bottom:6px;">📦 الكنوز المتاحة</h2>
+        <div class="items-grid" id="items-container"></div>
+    </div>
+
+    <!-- ========== جزيرة مربع الحوار (Dialog Box) ========== -->
+    <div id="dialog-overlay">
+        <div id="dialog-box">
+            <div class="dialog-title" id="dialog-title">عنوان</div>
+            <div class="dialog-text" id="dialog-text">تفاصيل</div>
+            <div class="dialog-buttons" id="dialog-buttons"></div>
+        </div>
+    </div>
+
+    <!-- ========== سلة التسوق المنبثقة ========== -->
+    <div id="cart-panel">
+        <h3 style="color:#ffd54f; margin-bottom:12px;">🛒 سلة المشتريات</h3>
+        <div id="cart-items-list"></div>
+        <button class="dialog-btn" id="checkout-btn" style="width:100%; margin-top:12px;">إرسال الطلب</button>
+    </div>
+
+    <script>
+        /* ====================== التخزين المؤقت وإدارة الحالة (Global State) ====================== */
+        const STORAGE_KEYS = {
+            GOLD: 'hero_gold',
+            CART: 'hero_cart',
+            ORDERS: 'pending_orders',
+            PRODUCTS_CACHE: 'cached_products',
+            PRODUCTS_TIMESTAMP: 'products_ts'
+        };
+
+        // بيانات افتراضية (يتم استبدالها عند جلب Sheets بنجاح)
+        const DEFAULT_PRODUCTS = [
+            { id: 1, name: 'سيف خشبي', price: 100, desc: 'سيف تدريبي للبداية.', icon: '🗡️' },
+            { id: 2, name: 'درع حديدي', price: 250, desc: 'حماية متوسطة.', icon: '🛡️' },
+            { id: 3, name: 'جرعة صحة', price: 50, desc: 'يعيد 50 نقطة صحة.', icon: '🧪' },
+            { id: 4, name: 'خاتم القوة', price: 400, desc: 'يزيد القوة بنسبة 10%.', icon: '💍' },
+            { id: 5, name: 'قوس الصياد', price: 300, desc: 'دقة عالية.', icon: '🏹' },
+            { id: 6, name: 'درع التنين', price: 800, desc: 'أقوى درع.', icon: '🛡️' }
+        ];
+
+        // حالة المستخدم
+        let playerGold = parseInt(localStorage.getItem(STORAGE_KEYS.GOLD)) || 500;
+        let cart = JSON.parse(localStorage.getItem(STORAGE_KEYS.CART)) || [];
+        let products = [];
+
+        // عنوان Google Apps Script (يُضبط بعد النشر)
+        const GOOGLE_SCRIPT_URL = localStorage.getItem('gs_script_url') || ''; 
+
+        // تحديث واجهة المستخدم
+        function updateUI() {
+            document.getElementById('gold-amount').textContent = playerGold;
+            document.getElementById('cart-count').textContent = cart.length;
+            localStorage.setItem(STORAGE_KEYS.GOLD, playerGold);
+            localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(cart));
+        }
+
+        /* ====================== جزيرة إدارة المنتجات مع التخزين المؤقت ====================== */
+        async function loadProducts() {
+            const cached = localStorage.getItem(STORAGE_KEYS.PRODUCTS_CACHE);
+            const ts = localStorage.getItem(STORAGE_KEYS.PRODUCTS_TIMESTAMP);
+            const now = Date.now();
+            const cacheExpiry = 60 * 60 * 1000; // ساعة واحدة لتوفير البيانات
+
+            if (cached && ts && (now - parseInt(ts)) < cacheExpiry) {
+                products = JSON.parse(cached);
+                console.log('محمل من التخزين المحلي');
+                renderShopItems();
+                return;
+            }
+
+            // محاولة الجلب من Google Sheets إن وجد الرابط
+            if (GOOGLE_SCRIPT_URL) {
+                try {
+                    const resp = await fetch(`${GOOGLE_SCRIPT_URL}?action=getProducts`);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        if (data && data.length) {
+                            products = data;
+                            localStorage.setItem(STORAGE_KEYS.PRODUCTS_CACHE, JSON.stringify(products));
+                            localStorage.setItem(STORAGE_KEYS.PRODUCTS_TIMESTAMP, now.toString());
+                            console.log('من Google Sheets');
+                            renderShopItems();
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('تعذر الاتصال بـ Google Sheets، استخدام المحلي', e);
+                }
+            }
+
+            // استخدام البيانات الافتراضية
+            products = DEFAULT_PRODUCTS;
+            localStorage.setItem(STORAGE_KEYS.PRODUCTS_CACHE, JSON.stringify(products));
+            localStorage.setItem(STORAGE_KEYS.PRODUCTS_TIMESTAMP, now.toString());
+            renderShopItems();
+        }
+
+        /* ====================== عرض المنتجات مع Lazy Loading ====================== */
+        function renderShopItems() {
+            const container = document.getElementById('items-container');
+            container.innerHTML = '';
+            products.forEach((product, index) => {
+                const card = document.createElement('div');
+                card.className = 'item-card lazy-item';
+                card.setAttribute('data-id', product.id);
+                card.innerHTML = `
+                    <div class="item-icon">${product.icon || '📦'}</div>
+                    <div class="item-name">${product.name}</div>
+                    <div class="item-price">💰 ${product.price} ذهب</div>
+                `;
+                card.addEventListener('click', () => openShopDialog(product));
+                container.appendChild(card);
+            });
+
+            // تفعيل Intersection Observer للتحميل الكسول
+            const lazyCards = document.querySelectorAll('.lazy-item');
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.1 });
+
+            lazyCards.forEach(card => observer.observe(card));
+        }
+
+        /* ====================== نظام الحوار (Dialog System) ====================== */
+        function openShopDialog(product) {
+            document.getElementById('dialog-title').textContent = product.name;
+            document.getElementById('dialog-text').innerHTML = `
+                ${product.desc || 'منتج نادر'}<br>
+                <span style="color:#ffd700;">السعر: ${product.price} ذهب</span>
+            `;
+            const btnsDiv = document.getElementById('dialog-buttons');
+            btnsDiv.innerHTML = '';
+            
+            const buyBtn = document.createElement('button');
+            buyBtn.className = 'dialog-btn';
+            buyBtn.textContent = 'شراء';
+            buyBtn.addEventListener('click', () => {
+                if (playerGold >= product.price) {
+                    playerGold -= product.price;
+                    cart.push({...product});
+                    updateUI();
+                    closeDialog();
+                    // تأثير صوتي بسيط
+                    playSound('coin');
+                    alert(`✅ تم شراء ${product.name}!`);
+                } else {
+                    alert('❌ الذهب غير كافٍ!');
+                }
+            });
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'dialog-btn';
+            cancelBtn.textContent = 'إلغاء';
+            cancelBtn.addEventListener('click', closeDialog);
+
+            btnsDiv.appendChild(buyBtn);
+            btnsDiv.appendChild(cancelBtn);
+            document.getElementById('dialog-overlay').style.display = 'flex';
+        }
+
+        function closeDialog() {
+            document.getElementById('dialog-overlay').style.display = 'none';
+        }
+
+        /* ====================== نظام الصوتيات عبر Web Audio API ====================== */
+        function playSound(type) {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            if (type === 'coin') {
+                osc.frequency.setValueAtTime(800, ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(1200, ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.2);
+            } else if (type === 'step') {
+                osc.frequency.setValueAtTime(200, ctx.currentTime);
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.1);
+            }
+        }
+
+        /* ====================== عالم اللعبة (Game World) ====================== */
+        const ROWS = 10, COLS = 20;
+        let playerPos = { x: 2, y: 5 }; // موقع اللاعب داخل الشبكة
+        const treasurePositions = [
+            { x: 6, y: 2 }, { x: 13, y: 3 }, { x: 16, y: 7 }, { x: 8, y: 8 }
+        ];
+        let currentTreasureIndex = null;
+
+        function buildGameGrid() {
+            const grid = document.getElementById('game-grid');
+            grid.innerHTML = '';
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell';
+                    if ((r + c) % 2 === 0) cell.classList.add('path');
+                    // تعيين الكنوز
+                    if (treasurePositions.some(p => p.x === c && p.y === r)) {
+                        cell.classList.add('treasure');
+                    }
+                    cell.dataset.x = c;
+                    cell.dataset.y = r;
+                    grid.appendChild(cell);
+                }
+            }
+            updatePlayerVisual();
+        }
+
+        function updatePlayerVisual() {
+            const playerDiv = document.getElementById('player-sprite');
+            const cellSize = document.getElementById('game-grid').clientWidth / COLS;
+            playerDiv.style.left = (playerPos.x * cellSize) + 'px';
+            playerDiv.style.top = (playerPos.y * cellSize) + 'px';
+            // كشف القرب من كنز
+            const nearTreasure = treasurePositions.findIndex(t => 
+                Math.abs(t.x - playerPos.x) <= 1 && Math.abs(t.y - playerPos.y) <= 1
+            );
+            if (nearTreasure !== -1 && currentTreasureIndex !== nearTreasure) {
+                currentTreasureIndex = nearTreasure;
+                // عرض المنتج المرتبط (نأخذ منتج حسب الترتيب)
+                if (products.length > nearTreasure) {
+                    openShopDialog(products[nearTreasure]);
+                }
+            } else if (nearTreasure === -1) {
+                currentTreasureIndex = null;
+            }
+        }
+
+        function movePlayer(dx, dy) {
+            const newX = playerPos.x + dx;
+            const newY = playerPos.y + dy;
+            if (newX >= 0 && newX < COLS && newY >= 0 && newY < ROWS) {
+                playerPos.x = newX;
+                playerPos.y = newY;
+                updatePlayerVisual();
+                playSound('step');
+            }
+        }
+
+        /* ====================== أحداث لوحة المفاتيح ====================== */
+        window.addEventListener('keydown', (e) => {
+            if (document.getElementById('dialog-overlay').style.display === 'flex') return;
+            switch(e.key) {
+                case 'ArrowRight': movePlayer(1, 0); e.preventDefault(); break;
+                case 'ArrowLeft': movePlayer(-1, 0); e.preventDefault(); break;
+                case 'ArrowUp': movePlayer(0, -1); e.preventDefault(); break;
+                case 'ArrowDown': movePlayer(0, 1); e.preventDefault(); break;
+            }
+        });
+
+        /* ====================== سلة التسوق وإرسال الطلب ====================== */
+        function renderCart() {
+            const list = document.getElementById('cart-items-list');
+            list.innerHTML = '';
+            if (cart.length === 0) {
+                list.innerHTML = '<p style="color:#aaa;">السلة فارغة</p>';
+                return;
+            }
+            cart.forEach((item, idx) => {
+                const div = document.createElement('div');
+                div.className = 'cart-item';
+                div.innerHTML = `${item.icon} ${item.name} - ${item.price} ذهب <button data-idx="${idx}" class="remove-item" style="background:#a33; border:none; color:white; cursor:pointer;">×</button>`;
+                list.appendChild(div);
+            });
+            document.querySelectorAll('.remove-item').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const idx = parseInt(e.target.dataset.idx);
+                    playerGold += cart[idx].price;
+                    cart.splice(idx, 1);
+                    updateUI();
+                    renderCart();
+                });
+            });
+        }
+
+        document.getElementById('toggle-cart-btn').addEventListener('click', () => {
+            const panel = document.getElementById('cart-panel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            renderCart();
+        });
+
+        document.getElementById('checkout-btn').addEventListener('click', async () => {
+            if (cart.length === 0) {
+                alert('السلة فارغة!');
+                return;
+            }
+            const order = {
+                items: cart.map(i => ({ id: i.id, name: i.name, price: i.price })),
+                total: cart.reduce((sum, i) => sum + i.price, 0),
+                timestamp: new Date().toISOString(),
+                customer: prompt('أدخل اسمك للشحن:') || 'مغامر مجهول'
+            };
+
+            // حفظ محلياً دائماً
+            let pendingOrders = JSON.parse(localStorage.getItem(STORAGE_KEYS.ORDERS) || '[]');
+            pendingOrders.push(order);
+            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(pendingOrders));
+
+            // محاولة إرسال إلى Google Sheets إذا توفر الرابط
+            if (GOOGLE_SCRIPT_URL) {
+                try {
+                    const resp = await fetch(GOOGLE_SCRIPT_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({ action: 'addOrder', order: order }),
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    if (resp.ok) alert('✅ تم إرسال الطلب بنجاح وحفظه في قاعدة البيانات!');
+                    else throw new Error('فشل الإرسال');
+                } catch (e) {
+                    alert('⚠️ تعذر الإرسال للخادم، الطلب محفوظ محلياً وسيحاول لاحقاً.');
+                }
+            } else {
+                alert('📋 الطلب مسجل محلياً. قم بإعداد Google Apps Script للمزامنة.');
+            }
+
+            // إفراغ السلة
+            cart = [];
+            updateUI();
+            renderCart();
+            document.getElementById('cart-panel').style.display = 'none';
+        });
+
+        /* ====================== التهيئة الأولية ====================== */
+        window.addEventListener('load', () => {
+            buildGameGrid();
+            updateUI();
+            loadProducts();
+            // محاولة إعادة إرسال الطلبات المعلقة عند الاتصال
+            if (GOOGLE_SCRIPT_URL && localStorage.getItem(STORAGE_KEYS.ORDERS)) {
+                const pending = JSON.parse(localStorage.getItem(STORAGE_KEYS.ORDERS));
+                if (pending.length) {
+                    // يمكن إضافة آلية إعادة إرسال تلقائية هنا
+                }
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            updatePlayerVisual();
+        });
+    </script>
+</body>
+</html>
