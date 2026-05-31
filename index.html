@@ -149,15 +149,46 @@
       // =========================================================
 
       // ----- مصفوفة روابط الفيديوهات (ستُملأ لاحقاً من Google Sheets) -----
-      // للاختبار: 1000 رابط وهمي، يمكن استبدالها بروابط حقيقية
-      const TOTAL_VIDEOS = 1000;
-      const videoUrls = [];
-      for (let i = 1; i <= TOTAL_VIDEOS; i++) {
-        // استخدم فيديو قصير عام من CDN للتجربة (يمكنك تغييره لاحقاً)
-        // هذا الرابط مجرد مثال، تأكد من استخدام روابط مباشرة صالحة
-        videoUrls.push(`https://www.w3schools.com/html/mov_bbb.mp4`);
-        // ملاحظة: عند الاتصال بـ Google Sheets، سيتم ملء المصفوفة بالروابط الحقيقية
-      }
+     let TOTAL_VIDEOS = 0;
+const videoUrls = [];
+const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbzHD_WS_HyoZO56CLuoA1APvjcqdeQTThvzB_KahER_YOkQnVCG-HDaNXtj46J56caF/exec'; // ضع رابط الـ Web App
+
+async function fetchVideoLinks() {
+  try {
+    loader.style.display = 'block';
+    const response = await fetch(SHEET_API_URL);
+    if (!response.ok) throw new Error('فشل جلب البيانات');
+    const urls = await response.json();
+    
+    if (urls.length === 0) {
+      alert('لا توجد فيديوهات في القائمة');
+      return;
+    }
+    
+    // تحديث المصفوفات العالمية
+    videoUrls.length = 0;
+    videoUrls.push(...urls);
+    TOTAL_VIDEOS = videoUrls.length;
+    
+    // إعادة بناء واجهة المشغل بالعدد الجديد
+    setWrapperHeight();
+    currentIndex = 0;
+    updateSlides();
+    resetScrollToMiddle();
+    loader.style.display = 'none';
+  } catch (error) {
+    loader.innerHTML = '❌ فشل تحميل الفيديوهات. تأكد من الإتصال.';
+    console.error(error);
+  }
+}
+
+// استبدل استدعاء init() في النهاية بـ:
+window.addEventListener('DOMContentLoaded', () => {
+  setWrapperHeight();
+  createSlides();
+  // بدلاً من init() السابقة، نستدعي fetchVideoLinks التي ستملأ البيانات ثم تشغل
+  fetchVideoLinks();
+});
 
       // ----- عناصر الـ DOM الأساسية -----
       const feedContainer = document.getElementById('feedContainer');
