@@ -1,802 +1,469 @@
-<!-- 
-================================================================================
- المتجر ثلاثي الأبعاد بتجربة لعبة (CSS 3D Store)
- المطور: محمود
- التقنيات: HTML/CSS/JS خالص، Google Sheets كقاعدة بيانات
- الجزر البرمجية:
-   1. جزيرة مشهد الـ 3D الرئيسية
-   2. جزيرة واجهة المستخدم (HUD) - العملات، السلة، الإشعارات
-   3. جزيرة تفاصيل المنتج (Modal)
-   4. جزيرة السلة الجانبية
-   5. جزيرة التحميل والاتصال بالشبكة
- ================================================================================
--->
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>متجر الزنزانة - Dungeon Shop</title>
-<style>
-/* ========== إعدادات عامة وأساسيات الجزيرة ========== */
-*, *::before, *::after {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>مشغل فيديوهات عمودي - سوريا</title>
+  <style>
+    /* ===== إعدادات الأداء والجمالية ===== */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-:root {
-  --bg-dungeon: #1a0f0a;
-  --gold: #d4af37;
-  --pixel-border: 4px;
-  --perspective: 1200px;
-}
+    html, body {
+      height: 100%;
+      overflow: hidden;           /* نمنع التمرير خارج الحاوية */
+      background: #000;
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      touch-action: pan-y;        /* نسمح بالسحب العمودي فقط */
+      -webkit-tap-highlight-color: transparent;
+    }
 
-body {
-  font-family: 'Courier New', monospace;
-  background: var(--bg-dungeon);
-  overflow: hidden;
-  height: 100vh;
-  width: 100vw;
-  touch-action: none; /* تحكم كامل باللمس */
-  user-select: none;
-  -webkit-user-select: none;
-  position: relative;
-}
+    /* الحاوية الرئيسية التي تحوي السلايدات وتفعّل الـ snap */
+    .feed-container {
+      width: 100%;
+      height: 100vh;             /* شاشة كاملة */
+      overflow-y: scroll;
+      scroll-snap-type: y mandatory;
+      -webkit-overflow-scrolling: touch;  /* سلاسة على iOS */
+      scrollbar-width: none;     /* إخفاء شريط التمرير */
+      -ms-overflow-style: none;
+      position: relative;
+      background: #000;
+    }
+    .feed-container::-webkit-scrollbar {
+      display: none;             /* إخفاء شريط التمرير على كروم وسفاري */
+    }
 
-/* ---------- جزيرة مشهد الـ 3D ---------- */
-.scene-container {
-  width: 100%;
-  height: 100%;
-  perspective: var(--perspective);
-  position: absolute;
-  top: 0;
-  left: 0;
-}
+    /* غلاف السلايدات – ارتفاعه يساوي عدد الفيديوهات × ارتفاع الشاشة */
+    .slides-wrapper {
+      position: relative;
+      /* سنحدد الارتفاع عبر JS ليطابق عدد الفيديوهات */
+      will-change: height;
+    }
 
-.scene {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  transform-style: preserve-3d;
-  transition: transform 0.1s ease-out;
-  will-change: transform;
-  /* الوضع الافتراضي - سنتحكم به بالماوس */
-}
+    /* السلايد الواحد */
+    .slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+      scroll-snap-align: start;  /* نقطة الالتقاط */
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    /* إذا كانت السلايدة فارغة نمنع الالتقاط بها */
+    .slide.empty-slide {
+      scroll-snap-align: none;
+      pointer-events: none;      /* لا تستجيب للمس */
+    }
 
-/* أرضية الزنزانة */
-.floor {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 30%;
-  background: linear-gradient(180deg, 
-    rgba(30,20,15,0.9) 0%, 
-    rgba(50,30,20,0.95) 40%, 
-    rgba(20,10,5,1) 100%);
-  transform: rotateX(60deg) translateZ(-80px);
-  transform-origin: bottom center;
-  box-shadow: inset 0 0 100px rgba(0,0,0,0.8);
-  border-top: 2px solid #3a2a1a;
-}
+    /* الفيديو يملأ السلايد بالكامل */
+    .slide video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000;
+    }
 
-/* جدار خلفي */
-.back-wall {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 80%;
-  height: 70%;
-  transform: translateX(-50%) translateZ(-300px) rotateY(0deg);
-  background: linear-gradient(180deg, #2c1e12 0%, #1a1008 100%);
-  border: 3px solid #4a3720;
-  box-shadow: 0 0 80px rgba(0,0,0,0.7) inset;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  color: #d4af37;
-  text-shadow: 0 0 15px #ffaa00;
-  opacity: 0.8;
-  pointer-events: none;
-}
+    /* زر كتم / تفعيل الصوت */
+    .mute-btn {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 44px;
+      height: 44px;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      z-index: 10;
+      border: 1px solid rgba(255,255,255,0.25);
+      transition: 0.2s;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mute-btn:active {
+      background: rgba(255,255,255,0.25);
+      transform: scale(0.92);
+    }
 
-/* قواعد المنتجات (pedestals) */
-.pedestal {
-  position: absolute;
-  width: 160px;
-  height: 200px;
-  transform-style: preserve-3d;
-  cursor: pointer;
-  transition: transform 0.2s, filter 0.2s;
-  /* الموقع سيتم تحديده ديناميكياً عبر JS */
-}
+    /* مؤشر رقم الفيديو (اختياري، للتوضيح) */
+    .video-index {
+      position: absolute;
+      bottom: 24px;
+      left: 20px;
+      color: rgba(255,255,255,0.8);
+      background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 14px;
+      z-index: 10;
+      pointer-events: none;
+    }
 
-.pedestal:hover {
-  transform: translateZ(30px) scale(1.1);
-  filter: drop-shadow(0 0 15px gold);
-}
-
-.product-card {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  background: linear-gradient(145deg, #3a2a1a, #1e140a);
-  border: 3px solid #6b4f2a;
-  border-radius: 8px;
-  box-shadow: 0 10px 20px rgba(0,0,0,0.7), inset 0 0 30px rgba(0,0,0,0.5);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
-  text-align: center;
-  transform-style: preserve-3d;
-}
-
-/* أيقونة SVG بسيطة لكل منتج */
-.product-icon {
-  width: 60px;
-  height: 60px;
-  margin-bottom: 10px;
-  filter: drop-shadow(0 0 8px #ffcc00);
-}
-
-.product-name {
-  font-size: 1rem;
-  font-weight: bold;
-  color: #f4e3b1;
-  text-shadow: 0 0 5px black;
-  margin-bottom: 5px;
-}
-
-.product-price {
-  font-size: 1.2rem;
-  color: var(--gold);
-  font-family: 'Courier New', monospace;
-  text-shadow: 0 0 8px #daa520;
-}
-
-/* ---------- جزيرة HUD (واجهة المستخدم) ---------- */
-.hud {
-  position: fixed;
-  top: 20px;
-  left: 20px;
-  right: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  z-index: 100;
-  pointer-events: none; /* نترك الأزرار تمرر الأحداث */
-}
-
-.hud > * {
-  pointer-events: auto;
-}
-
-.coins-display, .cart-btn, .network-status {
-  background: rgba(0,0,0,0.7);
-  border: 2px solid #6b4f2a;
-  color: var(--gold);
-  padding: 8px 20px;
-  font-family: 'Courier New', monospace;
-  font-weight: bold;
-  font-size: 1.2rem;
-  backdrop-filter: blur(5px);
-  border-radius: 8px;
-  text-shadow: 0 0 8px #ffaa00;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.coins-display::before {
-  content: "🪙";
-  font-size: 1.5rem;
-}
-
-.cart-btn {
-  cursor: pointer;
-  background: rgba(212, 175, 55, 0.2);
-  transition: all 0.2s;
-}
-.cart-btn:hover {
-  background: rgba(212, 175, 55, 0.5);
-}
-
-.network-status.offline {
-  color: #ff4444;
-  border-color: #ff4444;
-  text-shadow: 0 0 8px red;
-}
-
-/* ---------- جزيرة تفاصيل المنتج (Modal) ---------- */
-.modal-overlay {
-  position: fixed;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: rgba(0,0,0,0.85);
-  display: none;
-  justify-content: center;
-  align-items: center;
-  z-index: 200;
-  backdrop-filter: blur(3px);
-}
-
-.modal-overlay.active {
-  display: flex;
-}
-
-.modal {
-  background: linear-gradient(135deg, #2c1e12, #1a0f08);
-  border: 4px solid #b8942e;
-  border-radius: 15px;
-  padding: 30px;
-  max-width: 400px;
-  width: 90%;
-  text-align: center;
-  color: #f4e3b1;
-  box-shadow: 0 0 50px rgba(212,175,55,0.5);
-  transform-style: preserve-3d;
-  animation: modalPop 0.3s ease-out;
-}
-
-@keyframes modalPop {
-  from { transform: scale(0.8) translateZ(-100px); opacity: 0; }
-  to { transform: scale(1) translateZ(0); opacity: 1; }
-}
-
-.modal .product-icon-large {
-  width: 100px;
-  height: 100px;
-  margin: 0 auto 15px;
-}
-
-.modal h2 {
-  font-size: 1.8rem;
-  margin-bottom: 10px;
-  text-shadow: 0 0 10px gold;
-}
-
-.modal .description {
-  font-size: 0.9rem;
-  margin: 15px 0;
-  color: #ccc;
-}
-
-.modal .price-big {
-  font-size: 2rem;
-  color: var(--gold);
-  margin: 15px 0;
-}
-
-.add-to-cart-btn, .close-modal-btn {
-  background: linear-gradient(180deg, #b8942e, #7a5c1e);
-  border: none;
-  color: black;
-  font-weight: bold;
-  padding: 12px 30px;
-  margin: 5px;
-  font-size: 1.2rem;
-  cursor: pointer;
-  border-radius: 8px;
-  text-transform: uppercase;
-  transition: 0.2s;
-}
-.add-to-cart-btn:hover {
-  background: linear-gradient(180deg, #d4af37, #9e7b2a);
-}
-
-.close-modal-btn {
-  background: #444;
-  color: white;
-}
-.close-modal-btn:hover {
-  background: #666;
-}
-
-/* ---------- جزيرة السلة الجانبية ---------- */
-.cart-panel {
-  position: fixed;
-  top: 0;
-  right: -320px;
-  width: 300px;
-  height: 100%;
-  background: rgba(20, 10, 5, 0.95);
-  border-left: 4px solid #b8942e;
-  z-index: 300;
-  transition: right 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  backdrop-filter: blur(10px);
-  color: #f4e3b1;
-  padding: 20px;
-}
-
-.cart-panel.open {
-  right: 0;
-}
-
-.cart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 2px solid #b8942e;
-  padding-bottom: 10px;
-}
-.cart-items-list {
-  flex: 1;
-  overflow-y: auto;
-  margin: 15px 0;
-}
-.cart-item {
-  display: flex;
-  justify-content: space-between;
-  margin: 10px 0;
-  font-size: 0.9rem;
-}
-.cart-total {
-  font-size: 1.3rem;
-  font-weight: bold;
-  border-top: 2px solid #b8942e;
-  padding-top: 10px;
-}
-.checkout-btn {
-  background: #d4af37;
-  color: black;
-  font-weight: bold;
-  padding: 10px;
-  border: none;
-  cursor: pointer;
-}
-
-/* ---------- جزيرة التحميل ---------- */
-.loading-screen {
-  position: fixed;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: #0a0604;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  z-index: 999;
-  transition: opacity 0.5s;
-}
-.loading-bar {
-  width: 200px;
-  height: 20px;
-  border: 3px solid #d4af37;
-  background: #222;
-  margin-top: 20px;
-}
-.loading-progress {
-  height: 100%;
-  width: 0%;
-  background: #d4af37;
-  transition: width 0.2s;
-}
-</style>
+    /* تحميل أولي بسيط */
+    .loader {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #fff;
+      font-size: 18px;
+      z-index: 100;
+      background: rgba(0,0,0,0.7);
+      padding: 12px 24px;
+      border-radius: 30px;
+      display: none;
+    }
+  </style>
 </head>
 <body>
 
-<!-- ========== جزيرة مشهد الـ 3D ========== -->
-<div class="scene-container" id="sceneContainer">
-  <div class="scene" id="scene">
-    <div class="floor"></div>
-    <div class="back-wall">⚔️ DUNGEON SHOP ⚔️</div>
-    <!-- سيتم إدراج قواعد المنتجات (pedestals) ديناميكياً عبر JS -->
+  <div class="feed-container" id="feedContainer">
+    <div class="slides-wrapper" id="slidesWrapper">
+      <!-- سيتم إنشاء 3 سلايدات فقط ديناميكياً -->
+    </div>
   </div>
-</div>
 
-<!-- ========== جزيرة HUD ========== -->
-<div class="hud">
-  <div class="coins-display" id="coinsDisplay">0</div>
-  <div class="cart-btn" id="cartBtn">🛒 السلة (<span id="cartCount">0</span>)</div>
-  <div class="network-status" id="networkStatus">⛓️ متصل</div>
-</div>
+  <div class="loader" id="loader">⏳ جاري تحميل الفيديوهات...</div>
 
-<!-- ========== جزيرة تفاصيل المنتج (Modal) ========== -->
-<div class="modal-overlay" id="modalOverlay">
-  <div class="modal">
-    <div class="product-icon-large" id="modalIcon"></div>
-    <h2 id="modalName"></h2>
-    <p class="description" id="modalDesc"></p>
-    <div class="price-big" id="modalPrice"></div>
-    <button class="add-to-cart-btn" id="modalAddToCart">🛒 أضف إلى السلة</button>
-    <button class="close-modal-btn" id="modalClose">إغلاق</button>
-  </div>
-</div>
+  <script>
+    (function() {
+      // ==================== الميثاق الأساسي ====================
+      // 3 عناصر فيديو فقط – DOM Recycling – أداء خارق على أضعف الأجهزة
+      // =========================================================
 
-<!-- ========== جزيرة السلة الجانبية ========== -->
-<div class="cart-panel" id="cartPanel">
-  <div class="cart-header">
-    <h3>🎒 حقيبة المغامر</h3>
-    <button class="close-modal-btn" id="closeCartBtn">✖</button>
-  </div>
-  <div class="cart-items-list" id="cartItemsList"></div>
-  <div class="cart-total">المجموع: <span id="cartTotal">0</span> 🪙</div>
-  <button class="checkout-btn" id="checkoutBtn">شراء (محاكاة)</button>
-</div>
-
-<!-- ========== جزيرة التحميل ========== -->
-<div class="loading-screen" id="loadingScreen">
-  <h1 style="color:#d4af37; text-shadow:0 0 20px;">⚔️ جارٍ دخول الزنزانة ⚔️</h1>
-  <div class="loading-bar"><div class="loading-progress" id="loadingProgress"></div></div>
-</div>
-
-<script>
-// ======================== المنطق البرمجي الرئيسي ========================
-// جميع الجزر تتعامل مع بعضها عبر كائن State مركزي
-
-// ---------- بيانات البيئة والتكوين ----------
-const CONFIG = {
-  // استبدل هذا الرابط برابط تطبيق Google Apps Script الخاص بك بعد نشره
-  GOOGLE_SHEETS_API_URL: 'https://script.google.com/macros/s/AKfycbw7xX6pL3kQN2vY9z1R5tFgH8jK4dM0aWxQyZ6bV2cL/exec', // مثال، غير صالح
-  CACHE_KEY_PRODUCTS: 'dungeon_shop_products',
-  CACHE_KEY_CART: 'dungeon_shop_cart',
-  CACHE_KEY_COINS: 'dungeon_shop_coins',
-  FALLBACK_PRODUCTS: [
-    { id: 1, name: 'سيف التنين', realName: 'فأرة ألعاب RGB', price: 150, category: 'أسلحة', icon: '🗡️' },
-    { id: 2, name: 'درع الظلام', realName: 'سماعة رأس احترافية', price: 220, category: 'دروع', icon: '🎧' },
-    { id: 3, name: 'قوس النور', realName: 'لوحة مفاتيح ميكانيكية', price: 180, category: 'أسلحة', icon: '⌨️' },
-    { id: 4, name: 'زجاجة مانا', realName: 'مشروب طاقة', price: 15, category: 'جرعات', icon: '🧪' },
-    { id: 5, name: 'خاتم الاختفاء', realName: 'قميص جيمر أسود', price: 75, category: 'قطع أثرية', icon: '👕' },
-    { id: 6, name: 'كرة النار', realName: 'مكبر صوت بلوتوث', price: 95, category: 'أسلحة', icon: '🔊' }
-  ],
-  PRODUCTS_PER_VIEW: 6
-};
-
-// ---------- إدارة الحالة العامة ----------
-const state = {
-  products: [],
-  cart: [],
-  coins: 0,
-  isOnline: navigator.onLine,
-  isLoading: true,
-  currentView: 0 // فهرس الصفحة للمنتجات المعروضة
-};
-
-// ---------- دوال التخزين المؤقت ----------
-const Storage = {
-  get(key, fallback) {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
-    } catch(e) { return fallback; }
-  },
-  set(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch(e) {}
-  }
-};
-
-// ---------- محاكاة عملات اللعبة ----------
-function initCoins() {
-  state.coins = Storage.get(CONFIG.CACHE_KEY_COINS, 500); // يبدأ اللاعب بـ 500 عملة
-  updateCoinsDisplay();
-}
-function addCoins(amount) {
-  state.coins += amount;
-  Storage.set(CONFIG.CACHE_KEY_COINS, state.coins);
-  updateCoinsDisplay();
-}
-function deductCoins(amount) {
-  if (state.coins >= amount) {
-    state.coins -= amount;
-    Storage.set(CONFIG.CACHE_KEY_COINS, state.coins);
-    updateCoinsDisplay();
-    return true;
-  }
-  return false;
-}
-
-// ---------- تحديث واجهة HUD ----------
-function updateCoinsDisplay() {
-  document.getElementById('coinsDisplay').textContent = state.coins;
-}
-function updateCartBadge() {
-  const count = state.cart.reduce((sum, item) => sum + item.quantity, 0);
-  document.getElementById('cartCount').textContent = count;
-}
-function updateNetworkStatus() {
-  const el = document.getElementById('networkStatus');
-  if (state.isOnline) {
-    el.textContent = '⛓️ متصل';
-    el.classList.remove('offline');
-  } else {
-    el.textContent = '⚠️ غير متصل';
-    el.classList.add('offline');
-  }
-}
-
-// ---------- جلب المنتجات من Google Sheets مع تخزين مؤقت ----------
-async function fetchProducts() {
-  // محاولة استخدام البيانات المخزنة محلياً أولاً (تحميل فوري)
-  const cached = Storage.get(CONFIG.CACHE_KEY_PRODUCTS, null);
-  if (cached) {
-    state.products = cached;
-    renderProducts();
-    finishLoading();
-  }
-
-  // في الخلفية، جلب آخر التحديثات إن كان متصلاً
-  if (state.isOnline) {
-    try {
-      const response = await fetch(CONFIG.GOOGLE_SHEETS_API_URL);
-      if (!response.ok) throw new Error('Network response was not ok');
-      const data = await response.json();
-      if (data && data.length > 0) {
-        state.products = data;
-        Storage.set(CONFIG.CACHE_KEY_PRODUCTS, data);
-        if (cached) renderProducts(); // إعادة العرض إذا اختلفت
-        else renderProducts();
+      // ----- مصفوفة روابط الفيديوهات (ستُملأ لاحقاً من Google Sheets) -----
+      // للاختبار: 1000 رابط وهمي، يمكن استبدالها بروابط حقيقية
+      const TOTAL_VIDEOS = 1000;
+      const videoUrls = [];
+      for (let i = 1; i <= TOTAL_VIDEOS; i++) {
+        // استخدم فيديو قصير عام من CDN للتجربة (يمكنك تغييره لاحقاً)
+        // هذا الرابط مجرد مثال، تأكد من استخدام روابط مباشرة صالحة
+        videoUrls.push(`https://www.w3schools.com/html/mov_bbb.mp4`);
+        // ملاحظة: عند الاتصال بـ Google Sheets، سيتم ملء المصفوفة بالروابط الحقيقية
       }
-    } catch (err) {
-      console.warn('فشل جلب البيانات من Google Sheets، استخدام المحلي:', err);
-      if (!state.products.length) {
-        // لا بيانات مخزنة، استخدم البيانات الافتراضية
-        state.products = CONFIG.FALLBACK_PRODUCTS;
-        renderProducts();
+
+      // ----- عناصر الـ DOM الأساسية -----
+      const feedContainer = document.getElementById('feedContainer');
+      const slidesWrapper = document.getElementById('slidesWrapper');
+      const loader = document.getElementById('loader');
+
+      // ----- متغيرات الحالة -----
+      let currentIndex = 0;               // الفهرس الحقيقي في المصفوفة (يبدأ من 0)
+      const SLIDE_COUNT = 3;              // العدد الثابت للسلايدات (سابق – حالي – تالٍ)
+      let slides = [];                    // عناصر السلايد
+      let videoElements = [];             // عناصر <video> داخل كل سلايد
+      let isUpdating = false;            // قفل لمنع التحديثات المتداخلة
+      let scrollTimeout = null;
+      let lastSnappedIndex = 1;          // آخر سلايد استقرينا عليه (0,1,2)
+
+      // ----- إعداد ارتفاع الغلاف (عدد الفيديوهات × ارتفاع الشاشة) -----
+      function setWrapperHeight() {
+        const vh = window.innerHeight;
+        slidesWrapper.style.height = (TOTAL_VIDEOS * vh) + 'px';
       }
-    }
-  } else {
-    // بدون اتصال، اعرض المخزن محلياً أو الافتراضي
-    if (!state.products.length) {
-      state.products = CONFIG.FALLBACK_PRODUCTS;
-      renderProducts();
-    }
-  }
-  finishLoading();
-}
 
-function finishLoading() {
-  state.isLoading = false;
-  document.getElementById('loadingScreen').style.opacity = '0';
-  setTimeout(() => {
-    document.getElementById('loadingScreen').style.display = 'none';
-  }, 500);
-}
+      // ----- إنشاء السلايدات الثابتة (3 فقط) -----
+      function createSlides() {
+        slidesWrapper.innerHTML = '';
+        for (let i = 0; i < SLIDE_COUNT; i++) {
+          const slide = document.createElement('div');
+          slide.className = 'slide';
+          // نبدأ بإخفاء السلايدات الجانبية (ستظهر لاحقاً)
+          if (i !== 1) slide.classList.add('empty-slide'); // الوسطى فقط نشطة في البداية
 
-// ---------- عرض المنتجات في مشهد 3D ----------
-const scene = document.getElementById('scene');
-let pedestals = [];
+          // عنصر الفيديو
+          const video = document.createElement('video');
+          video.setAttribute('playsinline', '');
+          video.setAttribute('webkit-playsinline', '');
+          video.setAttribute('muted', '');          // مكتوم الصوت افتراضياً
+          video.setAttribute('loop', '');           // تكرار (اختياري)
+          video.setAttribute('preload', 'auto');    // تحميل مسبق للفيديوهات القريبة
+          video.style.cssText = 'width:100%;height:100%;object-fit:cover;background:#000;';
 
-function renderProducts() {
-  // إزالة القواعد القديمة
-  pedestals.forEach(p => p.remove());
-  pedestals = [];
+          // زر كتم الصوت
+          const muteBtn = document.createElement('div');
+          muteBtn.className = 'mute-btn';
+          muteBtn.innerHTML = '🔇';                 // أيقونة مبدئية (سيتم التحديث)
+          muteBtn.setAttribute('aria-label', 'كتم / تفعيل الصوت');
 
-  // اختيار مجموعة المنتجات حسب الصفحة الحالية
-  const start = state.currentView * CONFIG.PRODUCTS_PER_VIEW;
-  const subset = state.products.slice(start, start + CONFIG.PRODUCTS_PER_VIEW);
-  if (subset.length === 0) return;
+          // مؤشر رقم الفيديو (اختياري)
+          const indexBadge = document.createElement('div');
+          indexBadge.className = 'video-index';
+          indexBadge.textContent = '1 / ' + TOTAL_VIDEOS;
 
-  // حساب إحداثيات ثلاثية الأبعاد بشكل دائري أو شبكي
-  const radius = 250;
-  const angleStep = (Math.PI * 2) / subset.length;
-  
-  subset.forEach((product, index) => {
-    const angle = angleStep * index - Math.PI/2; // نبدأ من الأعلى
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius - 100; // للخلف قليلاً
-    const y = -20; // ارتفاع القاعدة
+          slide.appendChild(video);
+          slide.appendChild(muteBtn);
+          slide.appendChild(indexBadge);
+          slidesWrapper.appendChild(slide);
 
-    const pedestal = document.createElement('div');
-    pedestal.className = 'pedestal';
-    pedestal.style.left = '50%';
-    pedestal.style.top = '50%';
-    pedestal.style.transform = `translate3d(${x}px, ${y}px, ${z}px)`;
-    pedestal.dataset.productId = product.id;
-    pedestal.innerHTML = `
-      <div class="product-card">
-        <div class="product-icon">${product.icon || '📦'}</div>
-        <div class="product-name">${product.name}</div>
-        <div class="product-price">${product.price} 🪙</div>
-      </div>
-    `;
-    pedestal.addEventListener('click', () => openProductModal(product));
-    scene.appendChild(pedestal);
-    pedestals.push(pedestal);
-  });
-}
+          slides.push(slide);
+          videoElements.push(video);
 
-// ---------- جزيرة التحكم بالماوس (دوران المشهد 3D) ----------
-const sceneContainer = document.getElementById('sceneContainer');
-let mouseX = 0, mouseY = 0;
-let targetRotX = 0, targetRotY = 0;
-let currentRotX = 0, currentRotY = 0;
+          // حدث زر الكتم
+          muteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const vid = video;
+            if (vid.muted) {
+              vid.muted = false;
+              muteBtn.innerHTML = '🔊';
+            } else {
+              vid.muted = true;
+              muteBtn.innerHTML = '🔇';
+            }
+          });
+        }
+      }
 
-sceneContainer.addEventListener('mousemove', (e) => {
-  const rect = sceneContainer.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  // تحويل الإحداثيات إلى زوايا (نطاق -15 إلى 15 درجة مثلاً)
-  targetRotY = ((x / rect.width) - 0.5) * 20;
-  targetRotX = ((y / rect.height) - 0.5) * -10;
-});
+      // ----- تحديث محتوى السلايدات الثلاث حسب الفهرس الحالي -----
+      function updateSlides() {
+        if (isUpdating) return;
+        isUpdating = true;
 
-// للأجهزة اللمسية
-sceneContainer.addEventListener('touchmove', (e) => {
-  e.preventDefault();
-  const touch = e.touches[0];
-  const rect = sceneContainer.getBoundingClientRect();
-  const x = touch.clientX - rect.left;
-  const y = touch.clientY - rect.top;
-  targetRotY = ((x / rect.width) - 0.5) * 20;
-  targetRotX = ((y / rect.height) - 0.5) * -10;
-}, { passive: false });
+        const vh = window.innerHeight;
+        const prevIndex = currentIndex - 1;
+        const nextIndex = currentIndex + 1;
 
-// حلقة التحديث للحركة السلسة
-function animateScene() {
-  // تقريب تدريجي (LERP)
-  currentRotY += (targetRotY - currentRotY) * 0.1;
-  currentRotX += (targetRotX - currentRotX) * 0.1;
-  scene.style.transform = `rotateX(${currentRotX}deg) rotateY(${currentRotY}deg)`;
-  requestAnimationFrame(animateScene);
-}
-animateScene();
+        // السلايد العلوي (السابق)
+        if (prevIndex >= 0) {
+          setSlideData(0, prevIndex, videoUrls[prevIndex]);
+          slides[0].classList.remove('empty-slide');
+          slides[0].style.top = (prevIndex * vh) + 'px';
+        } else {
+          // لا يوجد فيديو سابق – نخفي السلايد ونمنع الالتقاط
+          setSlideEmpty(0);
+          slides[0].style.top = '0px'; // خارج الرؤية
+        }
 
-// ---------- جزيرة تفاصيل المنتج ----------
-const modalOverlay = document.getElementById('modalOverlay');
-let currentModalProduct = null;
+        // السلايد الأوسط (الحالي) – دائماً نشط
+        setSlideData(1, currentIndex, videoUrls[currentIndex]);
+        slides[1].classList.remove('empty-slide');
+        slides[1].style.top = (currentIndex * vh) + 'px';
 
-function openProductModal(product) {
-  currentModalProduct = product;
-  document.getElementById('modalIcon').innerHTML = product.icon || '📦';
-  document.getElementById('modalName').textContent = product.name;
-  document.getElementById('modalDesc').textContent = product.realName || 'منتج مادي بجودة أسطورية';
-  document.getElementById('modalPrice').textContent = `${product.price} 🪙`;
-  modalOverlay.classList.add('active');
-}
+        // السلايد السفلي (التالي)
+        if (nextIndex < TOTAL_VIDEOS) {
+          setSlideData(2, nextIndex, videoUrls[nextIndex]);
+          slides[2].classList.remove('empty-slide');
+          slides[2].style.top = (nextIndex * vh) + 'px';
+        } else {
+          setSlideEmpty(2);
+          slides[2].style.top = ((TOTAL_VIDEOS - 1) * vh) + 'px'; // بعيد
+        }
 
-function closeModal() {
-  modalOverlay.classList.remove('active');
-  currentModalProduct = null;
-}
+        // تشغيل الفيديو الحالي فقط، وإيقاف البقية
+        playCurrentVideo();
 
-document.getElementById('modalClose').addEventListener('click', closeModal);
-modalOverlay.addEventListener('click', (e) => {
-  if (e.target === modalOverlay) closeModal();
-});
+        // تحديث شارة الفهرس لكل سلايد
+        updateBadges();
 
-// إضافة إلى السلة من النافذة
-document.getElementById('modalAddToCart').addEventListener('click', () => {
-  if (currentModalProduct) {
-    addToCart(currentModalProduct);
-    closeModal();
-  }
-});
+        isUpdating = false;
+      }
 
-// ---------- إدارة السلة ----------
-function loadCart() {
-  state.cart = Storage.get(CONFIG.CACHE_KEY_CART, []);
-  updateCartBadge();
-}
+      function setSlideData(slideIdx, videoArrayIndex, url) {
+        const video = videoElements[slideIdx];
+        // تغيير المصدر فقط إذا كان مختلفاً لتجنب إعادة التحميل غير الضرورية
+        if (video.src !== url) {
+          video.src = url;
+          video.load();
+        }
+        video.muted = true; // نعيد الكتم عند التبديل (وفقاً للميثاق)
+        // تحديث زر الكتم
+        const muteBtn = slides[slideIdx].querySelector('.mute-btn');
+        if (muteBtn) muteBtn.innerHTML = '🔇';
+      }
 
-function saveCart() {
-  Storage.set(CONFIG.CACHE_KEY_CART, state.cart);
-  updateCartBadge();
-}
+      function setSlideEmpty(slideIdx) {
+        const video = videoElements[slideIdx];
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+        slides[slideIdx].classList.add('empty-slide');
+        const muteBtn = slides[slideIdx].querySelector('.mute-btn');
+        if (muteBtn) muteBtn.innerHTML = '🔇';
+      }
 
-function addToCart(product) {
-  const existing = state.cart.find(item => item.id === product.id);
-  if (existing) {
-    existing.quantity++;
-  } else {
-    state.cart.push({ ...product, quantity: 1 });
-  }
-  saveCart();
-  showFloatingMessage(`تمت إضافة ${product.name} إلى الحقيبة!`);
-}
+      function playCurrentVideo() {
+        // نوقف جميع الفيديوهات أولاً
+        videoElements.forEach(v => v.pause());
+        
+        const currentVideo = videoElements[1]; // الأوسط هو الحالي
+        if (currentVideo.src && currentVideo.src !== window.location.href) {
+          currentVideo.currentTime = 0;
+          currentVideo.play().catch(() => {
+            // سياسة المتصفح قد تمنع التشغيل التلقائي، نتعامل بصمت
+          });
+        }
+      }
 
-function removeFromCart(productId) {
-  state.cart = state.cart.filter(item => item.id !== productId);
-  saveCart();
-  renderCartItems();
-}
+      function updateBadges() {
+        const prevIdx = currentIndex - 1;
+        const nextIdx = currentIndex + 1;
+        
+        const badge0 = slides[0].querySelector('.video-index');
+        const badge1 = slides[1].querySelector('.video-index');
+        const badge2 = slides[2].querySelector('.video-index');
+        
+        if (badge0) badge0.textContent = prevIdx >= 0 ? `${prevIdx+1} / ${TOTAL_VIDEOS}` : '';
+        if (badge1) badge1.textContent = `${currentIndex+1} / ${TOTAL_VIDEOS}`;
+        if (badge2) badge2.textContent = nextIdx < TOTAL_VIDEOS ? `${nextIdx+1} / ${TOTAL_VIDEOS}` : '';
+      }
 
-// عرض السلة الجانبية
-const cartPanel = document.getElementById('cartPanel');
-document.getElementById('cartBtn').addEventListener('click', () => {
-  cartPanel.classList.toggle('open');
-  renderCartItems();
-});
-document.getElementById('closeCartBtn').addEventListener('click', () => {
-  cartPanel.classList.remove('open');
-});
+      // ----- إعادة ضبط التمرير إلى السلايد الأوسط بعد الانتقال -----
+      function resetScrollToMiddle() {
+        const vh = window.innerHeight;
+        const targetScrollTop = currentIndex * vh; // هذا يجعل السلايد الأوسط في موضعه الصحيح
 
-function renderCartItems() {
-  const list = document.getElementById('cartItemsList');
-  list.innerHTML = '';
-  state.cart.forEach(item => {
-    const div = document.createElement('div');
-    div.className = 'cart-item';
-    div.innerHTML = `
-      <span>${item.icon} ${item.name} x${item.quantity}</span>
-      <span>${item.price * item.quantity} 🪙</span>
-      <button class="close-modal-btn" style="padding:0 5px;" data-id="${item.id}">✖</button>
-    `;
-    div.querySelector('button').addEventListener('click', (e) => {
-      e.stopPropagation();
-      removeFromCart(item.id);
-    });
-    list.appendChild(div);
-  });
-  const total = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  document.getElementById('cartTotal').textContent = total;
-}
+        // نمنع السلاسة المؤقتة ليكون التصحيح فورياً
+        feedContainer.style.scrollBehavior = 'auto';
+        feedContainer.scrollTop = targetScrollTop;
+        
+        // نعيد سلوك التمرير الطبيعي (إن وجد، لكننا لم نضبط smooth)
+        feedContainer.style.scrollBehavior = '';
+        lastSnappedIndex = 1;
+      }
 
-// زر الدفع الوهمي
-document.getElementById('checkoutBtn').addEventListener('click', () => {
-  const total = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  if (total === 0) return alert('حقيبتك فارغة!');
-  if (deductCoins(total)) {
-    alert(`لقد اشتريت الأغراض بقيمة ${total} عملة! (محاكاة)`);
-    state.cart = [];
-    saveCart();
-    renderCartItems();
-    cartPanel.classList.remove('open');
-  } else {
-    alert('ليس لديك عملات كافية! أكمل المهام لتربح المزيد.');
-  }
-});
+      // ----- التعامل مع التمرير واكتشاف الانتقال إلى سلايد جانبي -----
+      function handleScrollEnd() {
+        if (isUpdating) return;
+        
+        const vh = window.innerHeight;
+        const scrollTop = feedContainer.scrollTop;
+        
+        // حساب أقرب نقطة التقاط (slide index 0,1,2) بالنسبة للغلاف
+        // لأن السلايدات موزعة على كامل ارتفاع الغلاف، نقسم على vh
+        const nearestVideoIndex = Math.round(scrollTop / vh);
+        
+        // تحديد أي سلايد من الثلاثة يمثله هذا الموقع
+        let snappedSlideLocalIndex;
+        if (nearestVideoIndex === currentIndex) {
+          snappedSlideLocalIndex = 1;  // الأوسط
+        } else if (nearestVideoIndex === currentIndex - 1 && currentIndex > 0) {
+          snappedSlideLocalIndex = 0;  // العلوي
+        } else if (nearestVideoIndex === currentIndex + 1 && currentIndex < TOTAL_VIDEOS - 1) {
+          snappedSlideLocalIndex = 2;  // السفلي
+        } else {
+          // انتقلنا خارج الحدود المسموحة (يحدث عند محاولة تجاوز البداية/النهاية)
+          // نعيد التمرير إلى المنتصف فوراً
+          resetScrollToMiddle();
+          return;
+        }
 
-// رسالة عائمة
-function showFloatingMessage(text) {
-  const msg = document.createElement('div');
-  msg.style.position = 'fixed';
-  msg.style.bottom = '20px';
-  msg.style.left = '50%';
-  msg.style.transform = 'translateX(-50%)';
-  msg.style.background = '#d4af37';
-  msg.style.color = 'black';
-  msg.style.padding = '10px 25px';
-  msg.style.borderRadius = '20px';
-  msg.style.fontWeight = 'bold';
-  msg.style.zIndex = '500';
-  msg.textContent = text;
-  document.body.appendChild(msg);
-  setTimeout(() => msg.remove(), 2000);
-}
+        // إذا استقر المستخدم على السلايد الأوسط، لا شيء نفعله
+        if (snappedSlideLocalIndex === 1) {
+          lastSnappedIndex = 1;
+          return;
+        }
 
-// ---------- إدارة حالة الشبكة ----------
-window.addEventListener('online', () => {
-  state.isOnline = true;
-  updateNetworkStatus();
-  fetchProducts(); // تحديث فوري
-});
-window.addEventListener('offline', () => {
-  state.isOnline = false;
-  updateNetworkStatus();
-});
+        // انتقل إلى فيديو جديد (أعلى أو أسفل)
+        if (snappedSlideLocalIndex === 0 && currentIndex > 0) {
+          // انتقلنا للأعلى (الفيديو السابق)
+          currentIndex--;
+        } else if (snappedSlideLocalIndex === 2 && currentIndex < TOTAL_VIDEOS - 1) {
+          // انتقلنا للأسفل (الفيديو التالي)
+          currentIndex++;
+        } else {
+          // محاولة تجاوز الحدود – نمنعها
+          resetScrollToMiddle();
+          return;
+        }
 
-// ---------- محاكاة تحميل تدريجي (للمظهر فقط) ----------
-let loadProgress = 0;
-const progressBar = document.getElementById('loadingProgress');
-function simulateLoading() {
-  if (loadProgress < 100) {
-    loadProgress += Math.random() * 15;
-    if (loadProgress > 100) loadProgress = 100;
-    progressBar.style.width = loadProgress + '%';
-    setTimeout(simulateLoading, 200);
-  }
-}
-simulateLoading();
+        // تحديث المحتوى (سيغير أماكن السلايدات ويرفعها للمواقع الجديدة)
+        updateSlides();
+        
+        // إعادة ضبط موضع التمرير إلى المنتصف بعد التحديث
+        resetScrollToMiddle();
+      }
 
-// ---------- بدء التشغيل ----------
-async function init() {
-  updateNetworkStatus();
-  loadCart();
-  initCoins();
-  await fetchProducts(); // هذا سينهي التحميل عند الجلب أو استخدام الكاش
-  // إذا لم تنته fetchProducts بسرعة، سننهي التحميل بعد 2.5 ثانية كحد أقصى
-  setTimeout(() => {
-    if (state.isLoading) finishLoading();
-  }, 2500);
-}
+      // ----- مستمع التمرير مع تجميع الأحداث (Debounce) -----
+      feedContainer.addEventListener('scroll', () => {
+        // نلغي المؤقت السابق لننتظر حتى يتوقف التمرير
+        if (scrollTimeout) clearTimeout(scrollTimeout);
+        
+        // نبدأ مؤقتاً جديداً: عندما يتوقف التمرير لمدة 100 مللي ثانية ننفذ المنطق
+        scrollTimeout = setTimeout(() => {
+          handleScrollEnd();
+        }, 100);
+      }, { passive: true });
 
-init();
-</script>
+      // دعم حدث `scrollend` الحديث إن وجد (يحسن الاستجابة)
+      if ('onscrollend' in feedContainer) {
+        feedContainer.addEventListener('scrollend', () => {
+          if (scrollTimeout) {
+            clearTimeout(scrollTimeout);
+            scrollTimeout = null;
+          }
+          handleScrollEnd();
+        });
+      }
 
+      // ----- التعامل مع تغيير أبعاد الشاشة (الدوران مثلاً) -----
+      window.addEventListener('resize', () => {
+        setWrapperHeight();
+        // نعيد تموضع السلايدات حسب المؤشر الحالي
+        const vh = window.innerHeight;
+        if (slides[0] && !slides[0].classList.contains('empty-slide') && currentIndex > 0) {
+          slides[0].style.top = ((currentIndex - 1) * vh) + 'px';
+        }
+        if (slides[1]) slides[1].style.top = (currentIndex * vh) + 'px';
+        if (slides[2] && !slides[2].classList.contains('empty-slide') && currentIndex < TOTAL_VIDEOS - 1) {
+          slides[2].style.top = ((currentIndex + 1) * vh) + 'px';
+        }
+        resetScrollToMiddle();
+      });
+
+      // ----- بدء التشغيل الأولي -----
+      function init() {
+        setWrapperHeight();
+        createSlides();
+        
+        // ضبط السلايد الأول (الفيديو 0)
+        currentIndex = 0;
+        updateSlides();
+        
+        // وضع التمرير في المنتصف (يظهر السلايد الأوسط)
+        resetScrollToMiddle();
+        
+        // إخفاء أي مؤشر تحميل
+        loader.style.display = 'none';
+      }
+
+      // تشغيل التطبيق
+      init();
+
+      // ----- (اختياري) تحضير لدمج Google Sheets لاحقاً -----
+      // async function fetchVideoLinksFromSheets() {
+      //   const sheetId = 'YOUR_SHEET_ID';
+      //   const apiKey = 'YOUR_API_KEY';
+      //   const range = 'Sheet1!A:A'; // عمود الروابط
+      //   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${apiKey}`;
+      //   const response = await fetch(url);
+      //   const data = await response.json();
+      //   if (data.values) {
+      //     videoUrls.length = 0;
+      //     data.values.forEach(row => { if(row[0]) videoUrls.push(row[0]); });
+      //     TOTAL_VIDEOS = videoUrls.length;
+      //     setWrapperHeight();
+      //     updateSlides();
+      //   }
+      // }
+
+    })();
+  </script>
 </body>
 </html>
