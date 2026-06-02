@@ -1,6 +1,5 @@
-import { CONFIG } from './config.js';
+import { CONFIG, escapeHtml } from './config.js';
 import { ProductCard } from './ProductCard.js';
-import { escapeHtml } from './config.js';
 
 export class ProductsGrid {
     constructor(containerId, storage, onGlobalQuantityChange) {
@@ -26,9 +25,13 @@ export class ProductsGrid {
         this.onImageProgress = null;
         this.skeleton = document.getElementById('skeletonLoader');
         this.productsGridDiv = document.getElementById('productsGrid');
-        this.isRendering = false;
-        this.renderQueue = [];      // قائمة انتظار للتصنيفات التي لم ترسم بعد
-        this.batchSize = 2;         // عدد التصنيفات التي ترسم دفعة واحدة (تحسين الأداء)
+        this.renderQueue = [];
+        this.batchSize = 2;
+        // تتبع مجموع السلة تزايدياً بدلاً من إعادة الحساب الكامل
+        this._cartTotalQty = 0;
+        this._cartTotalPrice = 0;
+        // كاش السلة لتجنب قراءة localStorage مع كل كرت
+        this._cartMapCache = null;
     }
 
     setImageProgressCallback(cb) {
@@ -90,20 +93,21 @@ export class ProductsGrid {
 
     renderVisibleSections() {
         if (!this.productsGridDiv) return;
-        if (this.isRendering) return;
-        this.isRendering = true;
+        // إلغاء أي queue سابق بدلاً من حجب الاستدعاء — يمنع تراكم الرسم
+        this.renderQueue = [];
         this.productsGridDiv.innerHTML = '';
         this.cards = [];
         this.totalImages = 0;
         this.imagesLoaded = 0;
-        this.renderQueue = [];
+        this._cartTotalQty = 0;
+        this._cartTotalPrice = 0;
+        // قراءة السلة مرة واحدة فقط لجميع الكروت
+        this._cartMapCache = this.getCartMapFromStorage();
 
         const sectionsToShow = this.allSectionsList.slice(0, this.visibleSectionsCount);
-        // إضافة جميع الأقسام إلى قائمة الانتظار
         for (const { mainCat, subCat } of sectionsToShow) {
             this.renderQueue.push({ mainCat, subCat });
         }
-        // بدء الرسم المجمع
         this.processRenderQueue();
 
         const hasMoreSections = this.allSectionsList.length > this.visibleSectionsCount;
@@ -128,7 +132,6 @@ export class ProductsGrid {
 
         if (this.skeleton) this.skeleton.style.display = 'none';
         if (this.productsGridDiv) this.productsGridDiv.style.display = 'grid';
-        this.isRendering = false;
     }
 
     processRenderQueue() {
@@ -158,24 +161,41 @@ export class ProductsGrid {
         this.renderVisibleSections();
     }
 
-    renderSubCategoryFull(mainCat, subCat, products) {
+    // دالة مشتركة لإنشاء عنصر القسم — تُستخدم في Full و Paginated
+    _createSectionElement(mainCat, subCat) {
         const sectionId = `sec-${mainCat}-${subCat}`;
-        let sectionEl = document.getElementById(sectionId);
-        if (!sectionEl) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'category-section';
-            wrapper.id = sectionId;
-            wrapper.innerHTML = `<div class="category-header" data-main="${escapeHtml(mainCat)}" data-sub="${escapeHtml(subCat)}">${escapeHtml(mainCat)} <span style="font-size:14px; color:var(--primary);"> / ${escapeHtml(subCat)}</span></div><div class="products-grid-inner" id="inner-${escapeHtml(mainCat)}-${escapeHtml(subCat)}"></div>`;
-            this.productsGridDiv.appendChild(wrapper);
-            sectionEl = wrapper;
-        }
+        const existing = document.getElementById(sectionId);
+        if (existing) return existing;
+        const wrapper = document.createElement('div');
+        wrapper.className = 'category-section';
+        wrapper.id = sectionId;
+        const header = document.createElement('div');
+        header.className = 'category-header';
+        header.setAttribute('data-main', mainCat);
+        header.setAttribute('data-sub', subCat);
+        header.textContent = mainCat;
+        const subSpan = document.createElement('span');
+        subSpan.style.cssText = 'font-size:14px; color:var(--primary);';
+        subSpan.textContent = ` / ${subCat}`;
+        header.appendChild(subSpan);
+        const inner = document.createElement('div');
+        inner.className = 'products-grid-inner';
+        inner.id = `inner-${mainCat}-${subCat}`;
+        wrapper.appendChild(header);
+        wrapper.appendChild(inner);
+        this.productsGridDiv.appendChild(wrapper);
+        return wrapper;
+    }
+
+    renderSubCategoryFull(mainCat, subCat, products) {
+        const sectionEl = this._createSectionElement(mainCat, subCat);
         const innerDiv = sectionEl.querySelector(`#inner-${mainCat}-${subCat}`);
         if (!innerDiv) return;
 
         innerDiv.innerHTML = '';
         const fragment = document.createDocumentFragment();
         products.forEach(product => {
-            const card = this.createCardInstance(product, mainCat, subCat);
+            const card = this.createCardInstance(product);
             fragment.appendChild(card.element);
             this.cards.push({ mainCat, subCat, card, element: card.element });
             this.totalImages++;
@@ -188,16 +208,7 @@ export class ProductsGrid {
     }
 
     renderSubCategoryPaginated(mainCat, subCat, products) {
-        const sectionId = `sec-${mainCat}-${subCat}`;
-        let sectionEl = document.getElementById(sectionId);
-        if (!sectionEl) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'category-section';
-            wrapper.id = sectionId;
-            wrapper.innerHTML = `<div class="category-header" data-main="${escapeHtml(mainCat)}" data-sub="${escapeHtml(subCat)}">${escapeHtml(mainCat)} <span style="font-size:14px; color:var(--primary);"> / ${escapeHtml(subCat)}</span></div><div class="products-grid-inner" id="inner-${escapeHtml(mainCat)}-${escapeHtml(subCat)}"></div>`;
-            this.productsGridDiv.appendChild(wrapper);
-            sectionEl = wrapper;
-        }
+        const sectionEl = this._createSectionElement(mainCat, subCat);
         const key = `${mainCat}|${subCat}`;
         const currentPage = this.currentPageMap.get(key) || 0;
         const start = currentPage * CONFIG.ITEMS_PER_PAGE;
@@ -211,7 +222,7 @@ export class ProductsGrid {
 
         const fragment = document.createDocumentFragment();
         pageProducts.forEach(product => {
-            const card = this.createCardInstance(product, mainCat, subCat);
+            const card = this.createCardInstance(product);
             fragment.appendChild(card.element);
             this.cards.push({ mainCat, subCat, card, element: card.element });
             this.totalImages++;
@@ -233,11 +244,15 @@ export class ProductsGrid {
         }
     }
 
-    createCardInstance(product, mainCat, subCat) {
-        const savedCart = this.getCartMapFromStorage();
-        const initialQty = savedCart[product.name] || 0;
+    createCardInstance(product) {
+        const initialQty = (this._cartMapCache || {})[product.name] || 0;
         const card = new ProductCard(product, this.storage, (name, newQty, delta) => this.onCardQuantityChange(name, newQty, delta), initialQty);
         const cardElement = card.render();
+        // تتبع مجموع السلة مبدئياً
+        if (initialQty > 0) {
+            this._cartTotalQty += initialQty;
+            this._cartTotalPrice += initialQty * product.price;
+        }
         const img = cardElement.querySelector('.product-img');
         if (img) {
             img.loading = 'lazy';
@@ -256,17 +271,17 @@ export class ProductsGrid {
         if (newQty === 0) delete cartMap[productName];
         else cartMap[productName] = newQty;
         this.saveCartMap(cartMap);
+        this._cartMapCache = cartMap;
 
-        let total = 0, totalQty = 0;
-        for (let cardObj of this.cards) {
-            const qty = cardObj.card.getQuantity();
-            if (qty > 0) {
-                totalQty += qty;
-                total += qty * cardObj.card.getProduct().price;
-            }
+        // تحديث المجموع تزايدياً بدلاً من إعادة حساب كل الكروت
+        const product = this.cards.find(c => c.card.getProduct().name === productName)?.card.getProduct();
+        if (product) {
+            this._cartTotalQty += delta;
+            this._cartTotalPrice += delta * product.price;
         }
+
         if (this.onGlobalQuantityChange) {
-            this.onGlobalQuantityChange(totalQty, total);
+            this.onGlobalQuantityChange(this._cartTotalQty, this._cartTotalPrice);
         }
     }
 
@@ -380,7 +395,3 @@ export class ProductsGrid {
         return total;
     }
 }
-
-
-
-
