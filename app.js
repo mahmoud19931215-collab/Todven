@@ -17,6 +17,16 @@ class App {
         this.init();
     }
 
+    hideSplash() {
+        const splash = document.getElementById('splashScreen');
+        if (splash) splash.classList.add('hide');
+    }
+
+    updateSplashMsg(msg) {
+        const el = document.getElementById('splashMsg');
+        if (el) el.innerText = msg;
+    }
+
     async init() {
         await this.storage.init();
         this.themeManager = new ThemeManager();
@@ -94,6 +104,9 @@ class App {
             this.showOfflineToast(true, this.storage.getLastUpdateTimestamp());
             if (skeleton) skeleton.style.display = 'none';
             if (productsGridDiv) productsGridDiv.style.display = 'grid';
+            this.hideSplash();
+        } else {
+            this.updateSplashMsg('جاري الاتصال بالخادم...');
         }
         this.fetchFreshData();
         this.setupNetworkListeners();
@@ -125,8 +138,10 @@ class App {
             }
             // All retries exhausted
             if (!this.fullData) {
+                this.hideSplash();
                 this.showOfflinePage();
             } else {
+                this.hideSplash();
                 this.showOfflineToast(true, this.storage.getLastUpdateTimestamp());
             }
         }
@@ -150,6 +165,7 @@ class App {
         const gridDiv = document.getElementById('productsGrid');
         if (skeleton) skeleton.style.display = 'none';
         if (gridDiv) gridDiv.style.display = 'grid';
+        this.hideSplash();
     }
 
     showOfflineToast(isCached, timestamp) {
