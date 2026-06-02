@@ -216,7 +216,10 @@ class App {
         window.addEventListener('online', () => {
             this.isOnline = true;
             this.hideOfflinePage();
-            this.fetchFreshData();
+            // جلب فقط إذا كانت البيانات قديمة أو غير موجودة
+            const lastUpdate = this.storage.getLastUpdateTimestamp();
+            const isStale = !lastUpdate || (Date.now() - lastUpdate > CONFIG.CACHE_TTL);
+            if (isStale) this.fetchFreshData();
         });
         window.addEventListener('offline', () => {
             this.isOnline = false;
