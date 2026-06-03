@@ -1,5 +1,5 @@
 import { CONFIG, escapeHtml } from './config.js';
-import { ProductCard } from './ProductCard.js';
+import { ProductCard, VideoModal } from './ProductCard.js';
 
 export class ProductsGrid {
     constructor(containerId, storage, onGlobalQuantityChange) {
