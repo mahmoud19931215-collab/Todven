@@ -1123,3 +1123,112 @@ body {
     .products-grid-inner { grid-template-columns: repeat(4, 1fr); }
     .main-container { padding: 16px 20px; }
 }
+
+/* ========== Video Play Badge على الصورة ========== */
+.video-play-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 36px;
+    height: 36px;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 13px;
+    z-index: 2;
+    cursor: pointer;
+    transition: var(--transition);
+    border: 1.5px solid rgba(255,255,255,0.3);
+}
+.video-play-badge:hover {
+    background: var(--primary);
+    border-color: transparent;
+    transform: scale(1.12);
+}
+/* تكبير الأيقونة عند hover على البطاقة كلها */
+.product-card:hover .video-play-badge {
+    background: var(--primary);
+    border-color: transparent;
+}
+
+/* ========== Video Modal ========== */
+.video-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.82);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+.video-modal-overlay.open {
+    visibility: visible;
+    opacity: 1;
+}
+.video-modal-card {
+    background: #0d1117;
+    border-radius: 20px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 640px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.07);
+    transform: scale(0.94) translateY(10px);
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.video-modal-overlay.open .video-modal-card {
+    transform: scale(1) translateY(0);
+}
+.video-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.video-modal-title {
+    color: #ecf0f1;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: var(--font);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-left: 12px;
+}
+.video-modal-close {
+    background: rgba(255,255,255,0.1);
+    border: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    flex-shrink: 0;
+}
+.video-modal-close:hover { background: rgba(231,76,60,0.7); }
+.video-modal-body {
+    background: #000;
+    line-height: 0;
+}
+.video-player {
+    width: 100%;
+    max-height: 70vh;
+    display: block;
+    outline: none;
+}
