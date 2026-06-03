@@ -60,6 +60,22 @@ export class ProductCard {
         this.subtotalRow = card.querySelector('.item-subtotal');
         this.imageElement = card.querySelector(`#${uniqueId}`);
 
+        // فتح الفيديو عند الضغط على الصورة
+        if (this.product.videoUrl) {
+            this.imageElement.style.cursor = 'pointer';
+            const playBadge = document.createElement('div');
+            playBadge.className = 'video-play-badge';
+            playBadge.innerHTML = '<i class="fas fa-play"></i>';
+            // نضعه بعد الصورة مباشرة
+            this.imageElement.insertAdjacentElement('afterend', playBadge);
+            const openVideo = (e) => {
+                e.stopPropagation();
+                VideoModal.open(this.product.videoUrl, this.product.name);
+            };
+            this.imageElement.addEventListener('click', openVideo);
+            playBadge.addEventListener('click', openVideo);
+        }
+
         // تفعيل زر التفاصيل
         const descToggle = card.querySelector('.product-desc-toggle');
         const descBody   = card.querySelector('.product-desc-body');
@@ -178,5 +194,68 @@ export class ProductCard {
 
     getProduct() {
         return this.product;
+    }
+}
+
+// ========== Video Modal (Singleton) ==========
+export class VideoModal {
+    static _el = null;
+
+    static _build() {
+        if (document.getElementById('videoModal')) return;
+        const modal = document.createElement('div');
+        modal.id = 'videoModal';
+        modal.className = 'video-modal-overlay';
+        modal.innerHTML = `
+            <div class="video-modal-card">
+                <div class="video-modal-header">
+                    <span id="videoModalTitle" class="video-modal-title"></span>
+                    <button id="videoModalClose" class="video-modal-close"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="video-modal-body">
+                    <video id="videoModalPlayer" class="video-player" controls playsinline></video>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        // إغلاق بالضغط على الخلفية أو زر الإغلاق
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) VideoModal.close();
+        });
+        document.getElementById('videoModalClose').addEventListener('click', () => VideoModal.close());
+
+        // إغلاق بـ Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') VideoModal.close();
+        });
+
+        VideoModal._el = modal;
+    }
+
+    static open(videoUrl, title = '') {
+        VideoModal._build();
+        const modal  = document.getElementById('videoModal');
+        const player = document.getElementById('videoModalPlayer');
+        const titleEl = document.getElementById('videoModalTitle');
+        if (titleEl) titleEl.textContent = title;
+        player.src = videoUrl;
+        player.load();
+        modal.classList.add('open');
+        // تشغيل تلقائي بعد فتح الـ modal
+        player.play().catch(() => {}); // catch لو المتصفح منع autoplay
+        document.body.style.overflow = 'hidden';
+    }
+
+    static close() {
+        const modal  = document.getElementById('videoModal');
+        const player = document.getElementById('videoModalPlayer');
+        if (!modal) return;
+        modal.classList.remove('open');
+        if (player) {
+            player.pause();
+            player.src = ''; // تحرير الموارد
+        }
+        document.body.style.overflow = '';
     }
 }
