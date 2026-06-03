@@ -485,21 +485,31 @@ body {
     transform: translateY(-2px) scale(0.99);
 }
 
-/* صورة المنتج - تغطي العرض بالكامل وزوايا منحنية */
+/* ===== صورة المنتج — جودة أصلية + تحميل سلس ===== */
 .product-img {
     width: 100%;
     aspect-ratio: 1 / 1;
     object-fit: cover;
-    background: linear-gradient(135deg, #f0faf5, #e8f7f0);
+    /* placeholder بلون هادئ يحجز المساحة أثناء التحميل — بدون وميض */
+    background: linear-gradient(135deg, #e8f5ee, #f0faf5);
     display: block;
-    transition: transform 0.35s ease;
-    /* جعل الصورة تلتصق بالحافة العلوية للبطاقة مع انحناء الزوايا العلوية فقط */
     border-radius: var(--radius-card) var(--radius-card) 0 0;
     position: relative;
     z-index: 1;
+    /* ظهور تدريجي عند اكتمال التحميل */
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.35s ease;
+}
+/* تشغيل الـ fade-in عند تحميل الصورة */
+.product-img.loaded {
+    opacity: 1;
 }
 .product-card:hover .product-img {
     transform: scale(1.02);
+}
+
+[data-theme="dark"] .product-img {
+    background: linear-gradient(135deg, #1a2530, #1f2e3d);
 }
 
 /* تفاصيل المنتج */
