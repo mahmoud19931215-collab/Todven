@@ -26,7 +26,6 @@ export class ProductCard {
             ? `<div class="item-subtotal">المجموع: <span class="subtotal-val">${(this.quantity * this.product.price).toLocaleString()}</span> ل.س</div>`
             : `<div class="item-subtotal" style="display: none;">المجموع: <span class="subtotal-val">0</span> ل.س</div>`;
 
-        // تفاصيل المنتج — مخفية بضغطة
         const descHtml = this.product.details
             ? `<div class="product-desc-toggle" role="button" aria-expanded="false" tabindex="0">
                    <span class="desc-toggle-label">التفاصيل <i class="fas fa-chevron-down desc-chevron"></i></span>
@@ -37,10 +36,11 @@ export class ProductCard {
             : '';
 
         card.innerHTML = `
-            <img class="product-img" id="${uniqueId}" 
-                 src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%23f0f0f0'/%3E%3Ctext x='100' y='110' text-anchor='middle' fill='%23999' font-size='14'%3Eتحميل...%3C/text%3E%3C/svg%3E" 
+            <img class="product-img" id="${uniqueId}"
+                 src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%23f0f0f0'/%3E%3Ctext x='100' y='110' text-anchor='middle' fill='%23999' font-size='14'%3Eتحميل...%3C/text%3E%3C/svg%3E"
                  alt="${escapeHtml(this.product.name)}"
-                 loading="lazy">
+                 loading="lazy"
+                 decoding="async">
             <div class="product-info">
                 <div class="product-name">${escapeHtml(this.product.name)}</div>
                 <div class="product-price">${this.product.price.toLocaleString()} ل.س</div>
@@ -76,7 +76,7 @@ export class ProductCard {
 
         const incBtn = card.querySelector('.inc-qty');
         const decBtn = card.querySelector('.dec-qty');
-        
+
         incBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             this.changeQuantity(1);
@@ -107,68 +107,29 @@ export class ProductCard {
         return card;
     }
 
-    async loadImage() {
+    loadImage() {
         if (!this.imageElement) return;
         const imageUrl = this.product.imageUrl;
-        if (!imageUrl) {
+
+        if (!imageUrl || !imageUrl.startsWith('http')) {
             this.setPlaceholderImage();
             return;
         }
 
-        // محاولة الحصول من الكاش
-        let cachedBlob = null;
-        try {
-            cachedBlob = await this.storage.getImageBlob(imageUrl);
-        } catch (e) {
-            console.warn("Error getting cached blob", e);
-        }
-
-        if (cachedBlob) {
-            const url = URL.createObjectURL(cachedBlob);
-            this.imageElement.src = url;
-            this.imageElement.onload = () => URL.revokeObjectURL(url);
-            this.imageElement.onerror = () => {
-                URL.revokeObjectURL(url);
-                this.loadImageDirect();
-            };
-            return;
-        }
-
-        // تحميل مباشر مع تخزين
-        this.loadImageDirect();
-    }
-
-    async loadImageDirect() {
-        const imageUrl = this.product.imageUrl;
-        if (!imageUrl) {
+        // الـ Service Worker يتكفّل بالكاش تلقائياً —
+        // نضع الـ src مباشرة والمتصفح يسترجعها من Cache API بعد أول زيارة
+        this.imageElement.src = imageUrl;
+        this.imageElement.onload  = () => this.imageElement.classList.add('loaded');
+        this.imageElement.onerror = () => {
             this.setPlaceholderImage();
-            return;
-        }
-
-        try {
-            const res = await fetch(imageUrl, { mode: 'cors' });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const blob = await res.blob();
-            await this.storage.saveImageBlob(imageUrl, blob);
-            const url = URL.createObjectURL(blob);
-            this.imageElement.src = url;
-            this.imageElement.onload = () => URL.revokeObjectURL(url);
-            this.imageElement.onerror = () => {
-                URL.revokeObjectURL(url); // ✅ إصلاح memory leak
-                this.setPlaceholderImage();
-            };
-        } catch (err) {
-            console.warn(`فشل تحميل الصورة: ${imageUrl}`, err);
-            this.imageElement.src = imageUrl;
-            this.imageElement.onerror = () => {
-                this.setPlaceholderImage();
-            };
-        }
+            this.imageElement.classList.add('loaded'); // أظهر الـ placeholder أيضاً
+        };
     }
 
     setPlaceholderImage() {
         if (this.imageElement) {
             this.imageElement.src = 'https://via.placeholder.com/300?text=No+Image';
+            this.imageElement.classList.add('loaded');
         }
     }
 
@@ -219,6 +180,3 @@ export class ProductCard {
         return this.product;
     }
 }
-
-
-
