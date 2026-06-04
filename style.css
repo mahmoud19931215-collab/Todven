@@ -1300,3 +1300,75 @@ body {
 }
 .swipe-hint-up   { top: 18px; }
 .swipe-hint-down { bottom: 18px; }
+
+/* ========== Video Skeleton shimmer ========== */
+.video-skeleton {
+    position: absolute;
+    inset: 0;
+    background: #111;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+    overflow: hidden;
+}
+.video-skeleton-shimmer {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        100deg,
+        transparent 20%,
+        rgba(255,255,255,0.06) 50%,
+        transparent 80%
+    );
+    background-size: 200% 100%;
+    animation: skeletonSlide 1.4s infinite linear;
+}
+@keyframes skeletonSlide {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+.video-skeleton-icon {
+    font-size: 52px;
+    color: rgba(255,255,255,0.12);
+    z-index: 1;
+}
+
+/* ========== Video Loader: Spinner دائري + نسبة % ========== */
+.video-loader {
+    position: absolute;
+    inset: 0;
+    display: none;           /* يظهر فقط عند waiting/stalled */
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 6;
+    background: rgba(0,0,0,0.45);
+    pointer-events: none;
+}
+.video-spinner {
+    width: 56px;
+    height: 56px;
+    transform: rotate(-90deg);
+}
+.video-spinner-track {
+    stroke: rgba(255,255,255,0.15);
+}
+.video-spinner-fill {
+    stroke: #2ecc71;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.3s linear;
+}
+.video-loader-pct {
+    color: #fff;
+    font-size: 14px;
+    font-family: var(--font);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+/* الفيديو يبدأ شفاف ويظهر بعد canplay */
+.video-player {
+    transition: opacity 0.25s ease;
+}
