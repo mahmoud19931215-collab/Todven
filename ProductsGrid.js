@@ -1,409 +1,563 @@
-import { CONFIG, escapeHtml } from './config.js';
-import { ProductCard, VideoModal } from './ProductCard.js';
+import { escapeHtml } from './config.js';
 
-export class ProductsGrid {
-    constructor(containerId, storage, onGlobalQuantityChange) {
-        this.container = document.getElementById(containerId);
+export class ProductCard {
+    constructor(product, storage, onQuantityChange, initialQty = 0) {
+        this.product = product;
         this.storage = storage;
-        this.onGlobalQuantityChange = onGlobalQuantityChange;
-        this.rawData = null;
-        this.mainCategories = new Set();
-        this.subCategoriesMap = new Map();
-        this.productsMap = new Map();
-        this.activeMain = 'all';
-        this.activeSub = null;
-        this.searchQuery = '';
-        this.currentPageMap = new Map();
-        this.loadMoreButtons = new Map();
-        this.allSectionsList = [];
-        this.visibleSectionsCount = 6;
-        this.sectionsPerLoad = 6;
-        this.sectionsLoadMoreBtn = null;
-        this.cards = [];
-        this.imagesLoaded = 0;
-        this.totalImages = 0;
-        this.onImageProgress = null;
-        this.skeleton = document.getElementById('skeletonLoader');
-        this.productsGridDiv = document.getElementById('productsGrid');
-        this.renderQueue = [];
-        this.batchSize = 2;
-        // تتبع مجموع السلة تزايدياً بدلاً من إعادة الحساب الكامل
-        this._cartTotalQty = 0;
-        this._cartTotalPrice = 0;
-        // كاش السلة لتجنب قراءة localStorage مع كل كرت
-        this._cartMapCache = null;
+        this.onQuantityChange = onQuantityChange;
+        this.quantity = initialQty;
+        this.element = null;
+        this.qtyInput = null;
+        this.subtotalSpan = null;
+        this.subtotalRow = null;
+        this.debounceTimer = null;
+        this.imageElement = null;
     }
 
-    setImageProgressCallback(cb) {
-        this.onImageProgress = cb;
-    }
+    render() {
+        const uniqueId = `img_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
+        const card = document.createElement('div');
+        card.className = 'product-card';
+        card.setAttribute('data-name', this.product.name);
+        card.setAttribute('data-price', this.product.price);
+        card.setAttribute('data-stock', this.product.stock || 999);
 
-    imageLoaded() {
-        this.imagesLoaded++;
-        if (this.onImageProgress && this.totalImages > 0) {
-            const percent = (this.imagesLoaded / this.totalImages) * 100;
-            this.onImageProgress(percent);
+        const subtotalDisplay = this.quantity > 0
+            ? `<div class="item-subtotal">المجموع: <span class="subtotal-val">${(this.quantity * this.product.price).toLocaleString()}</span> ل.س</div>`
+            : `<div class="item-subtotal" style="display: none;">المجموع: <span class="subtotal-val">0</span> ل.س</div>`;
+
+        const descHtml = this.product.details
+            ? `<div class="product-desc-toggle" role="button" aria-expanded="false" tabindex="0">
+                   <span class="desc-toggle-label">التفاصيل <i class="fas fa-chevron-down desc-chevron"></i></span>
+               </div>
+               <div class="product-desc-body" hidden>
+                   <p class="product-desc-text">${escapeHtml(this.product.details)}</p>
+               </div>`
+            : '';
+
+        card.innerHTML = `
+            <img class="product-img" id="${uniqueId}"
+                 src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%23f0f0f0'/%3E%3Ctext x='100' y='110' text-anchor='middle' fill='%23999' font-size='14'%3Eتحميل...%3C/text%3E%3C/svg%3E"
+                 alt="${escapeHtml(this.product.name)}"
+                 loading="lazy"
+                 decoding="async">
+            <div class="product-info">
+                <div class="product-name">${escapeHtml(this.product.name)}</div>
+                <div class="product-price">${this.product.price.toLocaleString()} ل.س</div>
+                ${descHtml}
+                ${subtotalDisplay}
+                <div class="qty-controls">
+                    <button class="qty-btn inc-qty">+</button>
+                    <input type="number" class="qty-input" value="${this.quantity}" min="0" max="${this.product.stock || 999}" step="1">
+                    <button class="qty-btn dec-qty">-</button>
+                </div>
+            </div>
+        `;
+
+        this.element = card;
+        this.qtyInput = card.querySelector('.qty-input');
+        this.subtotalSpan = card.querySelector('.subtotal-val');
+        this.subtotalRow = card.querySelector('.item-subtotal');
+        this.imageElement = card.querySelector(`#${uniqueId}`);
+
+        // فتح الفيديو عند الضغط على الصورة
+        if (this.product.videoUrl) {
+            this.imageElement.style.cursor = 'pointer';
+            const playBadge = document.createElement('div');
+            playBadge.className = 'video-play-badge';
+            playBadge.innerHTML = '<i class="fas fa-play"></i>';
+            // نضعه بعد الصورة مباشرة
+            this.imageElement.insertAdjacentElement('afterend', playBadge);
+            const openVideo = (e) => {
+                e.stopPropagation();
+                VideoModal.open(this.product.videoUrl, this.product.name);
+            };
+            this.imageElement.addEventListener('click', openVideo);
+            playBadge.addEventListener('click', openVideo);
         }
-    }
 
-    loadData(data) {
-        this.rawData = data;
-        this.clear();
-        // بناء الخرائط بشكل أسرع باستخدام for...of
-        for (const [mainCat, subCatsObj] of Object.entries(data)) {
-            this.mainCategories.add(mainCat);
-            const subSet = new Set();
-            for (const [subCat, products] of Object.entries(subCatsObj)) {
-                subSet.add(subCat);
-                const validProducts = products.map(p => ({
-                    ...p,
-                    imageUrl: p.imageUrl?.startsWith('http') ? p.imageUrl : 'https://via.placeholder.com/300?text=No+Image',
-                    stock: p.stock !== undefined ? p.stock : 999
-                }));
-                const key = `${mainCat}|${subCat}`;
-                this.productsMap.set(key, validProducts);
-                this.currentPageMap.set(key, 0);
-            }
-            this.subCategoriesMap.set(mainCat, subSet);
+        // تفعيل زر التفاصيل
+        const descToggle = card.querySelector('.product-desc-toggle');
+        const descBody   = card.querySelector('.product-desc-body');
+        if (descToggle && descBody) {
+            const toggle = () => {
+                const open = !descBody.hidden;
+                descBody.hidden = open;
+                descToggle.setAttribute('aria-expanded', String(!open));
+                descToggle.querySelector('.desc-chevron')?.classList.toggle('open', !open);
+            };
+            descToggle.addEventListener('click', (e) => { e.stopPropagation(); toggle(); });
+            descToggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
         }
-        // بناء playlist لكل المنتجات التي عندها فيديو
-        this._buildVideoPlaylist();
-        this.buildAllSectionsList();
-        this.renderVisibleSections();
-    }
 
-    _buildVideoPlaylist() {
-        const playlist = [];
-        for (const products of this.productsMap.values()) {
-            for (const p of products) {
-                if (p.videoUrl) playlist.push({ url: p.videoUrl, title: p.name });
-            }
-        }
-        VideoModal.setPlaylist(playlist);
-    }
+        const incBtn = card.querySelector('.inc-qty');
+        const decBtn = card.querySelector('.dec-qty');
 
-    buildAllSectionsList() {
-        this.allSectionsList = [];
-        if (this.activeMain === 'all') {
-            for (let mainCat of this.mainCategories) {
-                const subCats = this.subCategoriesMap.get(mainCat) || new Set();
-                for (let subCat of subCats) {
-                    this.allSectionsList.push({ mainCat, subCat });
+        incBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.changeQuantity(1);
+        });
+        decBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.changeQuantity(-1);
+        });
+
+        this.qtyInput.addEventListener('change', (e) => {
+            let newVal = parseInt(e.target.value);
+            if (isNaN(newVal)) newVal = 0;
+            const maxStock = this.product.stock || 999;
+            newVal = Math.min(maxStock, Math.max(0, newVal));
+            const delta = newVal - this.quantity;
+            if (delta !== 0) {
+                this.quantity = newVal;
+                this.updateUI();
+                if (this.onQuantityChange) {
+                    this.onQuantityChange(this.product.name, this.quantity, delta);
                 }
             }
-        } else {
-            if (this.activeSub && this.activeSub !== 'all') {
-                this.allSectionsList.push({ mainCat: this.activeMain, subCat: this.activeSub });
-            } else {
-                const subCats = this.subCategoriesMap.get(this.activeMain) || new Set();
-                for (let subCat of subCats) {
-                    this.allSectionsList.push({ mainCat: this.activeMain, subCat });
-                }
-            }
-        }
-    }
-
-    renderVisibleSections() {
-        if (!this.productsGridDiv) return;
-        // إلغاء أي queue سابق بدلاً من حجب الاستدعاء — يمنع تراكم الرسم
-        this.renderQueue = [];
-        this.productsGridDiv.innerHTML = '';
-        this.cards = [];
-        this.totalImages = 0;
-        this.imagesLoaded = 0;
-        this._cartTotalQty = 0;
-        this._cartTotalPrice = 0;
-        // قراءة السلة مرة واحدة فقط لجميع الكروت
-        this._cartMapCache = this.getCartMapFromStorage();
-
-        const sectionsToShow = this.allSectionsList.slice(0, this.visibleSectionsCount);
-        for (const { mainCat, subCat } of sectionsToShow) {
-            this.renderQueue.push({ mainCat, subCat });
-        }
-        this.processRenderQueue();
-
-        const hasMoreSections = this.allSectionsList.length > this.visibleSectionsCount;
-        if (hasMoreSections && !this.searchQuery) {
-            if (!this.sectionsLoadMoreBtn) {
-                this.sectionsLoadMoreBtn = document.createElement('button');
-                this.sectionsLoadMoreBtn.className = 'load-more-sections-btn';
-                this.sectionsLoadMoreBtn.innerText = '📂 تحميل المزيد من التصنيفات';
-                this.sectionsLoadMoreBtn.addEventListener('click', () => this.loadMoreSections());
-                this.productsGridDiv.appendChild(this.sectionsLoadMoreBtn);
-            } else {
-                this.sectionsLoadMoreBtn.style.display = 'block';
-            }
-        } else if (this.sectionsLoadMoreBtn) {
-            this.sectionsLoadMoreBtn.style.display = 'none';
-        }
-
-        if (this.searchQuery) {
-            if (this.sectionsLoadMoreBtn) this.sectionsLoadMoreBtn.style.display = 'none';
-            this.loadMoreButtons.forEach(btn => btn.style.display = 'none');
-        }
-
-        if (this.skeleton) this.skeleton.style.display = 'none';
-        if (this.productsGridDiv) this.productsGridDiv.style.display = 'grid';
-    }
-
-    processRenderQueue() {
-        if (this.renderQueue.length === 0) return;
-        // رسم عدد محدود من الأقسام في كل دورة لتجنب تجميد الواجهة
-        const batch = this.renderQueue.splice(0, this.batchSize);
-        for (const { mainCat, subCat } of batch) {
-            const key = `${mainCat}|${subCat}`;
-            let products = this.productsMap.get(key) || [];
-            if (this.searchQuery) {
-                const lowerQuery = this.searchQuery.toLowerCase();
-                products = products.filter(p => p.name.toLowerCase().includes(lowerQuery));
-                if (products.length === 0) continue;
-                this.renderSubCategoryFull(mainCat, subCat, products);
-            } else {
-                this.renderSubCategoryPaginated(mainCat, subCat, products);
-            }
-        }
-        // استخدام requestIdleCallback أو setTimeout لتفادي حظر الواجهة
-        if (this.renderQueue.length > 0) {
-            requestIdleCallback ? requestIdleCallback(() => this.processRenderQueue()) : setTimeout(() => this.processRenderQueue(), 10);
-        }
-    }
-
-    loadMoreSections() {
-        this.visibleSectionsCount += this.sectionsPerLoad;
-        this.renderVisibleSections();
-    }
-
-    // دالة مشتركة لإنشاء عنصر القسم — تُستخدم في Full و Paginated
-    _createSectionElement(mainCat, subCat) {
-        const sectionId = `sec-${mainCat}-${subCat}`;
-        const existing = document.getElementById(sectionId);
-        if (existing) return existing;
-        const wrapper = document.createElement('div');
-        wrapper.className = 'category-section';
-        wrapper.id = sectionId;
-        const header = document.createElement('div');
-        header.className = 'category-header';
-        header.setAttribute('data-main', mainCat);
-        header.setAttribute('data-sub', subCat);
-        header.textContent = mainCat;
-        const subSpan = document.createElement('span');
-        subSpan.style.cssText = 'font-size:14px; color:var(--primary);';
-        subSpan.textContent = ` / ${subCat}`;
-        header.appendChild(subSpan);
-        const inner = document.createElement('div');
-        inner.className = 'products-grid-inner';
-        inner.id = `inner-${mainCat}-${subCat}`;
-        wrapper.appendChild(header);
-        wrapper.appendChild(inner);
-        this.productsGridDiv.appendChild(wrapper);
-        return wrapper;
-    }
-
-    renderSubCategoryFull(mainCat, subCat, products) {
-        const sectionEl = this._createSectionElement(mainCat, subCat);
-        const innerDiv = sectionEl.querySelector(`#inner-${mainCat}-${subCat}`);
-        if (!innerDiv) return;
-
-        innerDiv.innerHTML = '';
-        const fragment = document.createDocumentFragment();
-        products.forEach(product => {
-            const card = this.createCardInstance(product);
-            fragment.appendChild(card.element);
-            this.cards.push({ mainCat, subCat, card, element: card.element });
-            this.totalImages++;
+            this.qtyInput.value = this.quantity;
         });
-        innerDiv.appendChild(fragment);
 
-        const key = `${mainCat}|${subCat}`;
-        const btn = this.loadMoreButtons.get(key);
-        if (btn) btn.style.display = 'none';
-    }
-
-    renderSubCategoryPaginated(mainCat, subCat, products) {
-        const sectionEl = this._createSectionElement(mainCat, subCat);
-        const key = `${mainCat}|${subCat}`;
-        const currentPage = this.currentPageMap.get(key) || 0;
-        const start = currentPage * CONFIG.ITEMS_PER_PAGE;
-        const end = start + CONFIG.ITEMS_PER_PAGE;
-        const pageProducts = products.slice(start, end);
-
-        const innerDiv = sectionEl.querySelector(`#inner-${mainCat}-${subCat}`);
-        if (!innerDiv) return;
-
-        if (currentPage === 0) innerDiv.innerHTML = '';
-
-        const fragment = document.createDocumentFragment();
-        pageProducts.forEach(product => {
-            const card = this.createCardInstance(product);
-            fragment.appendChild(card.element);
-            this.cards.push({ mainCat, subCat, card, element: card.element });
-            this.totalImages++;
-        });
-        innerDiv.appendChild(fragment);
-
-        this.currentPageMap.set(key, currentPage + 1);
-        const hasMore = end < products.length;
-        let loadBtn = this.loadMoreButtons.get(key);
-        if (!loadBtn && hasMore) {
-            loadBtn = document.createElement('button');
-            loadBtn.className = 'load-more-btn';
-            loadBtn.innerText = '➕ عرض المزيد';
-            loadBtn.addEventListener('click', () => this.renderSubCategoryPaginated(mainCat, subCat, products));
-            sectionEl.appendChild(loadBtn);
-            this.loadMoreButtons.set(key, loadBtn);
-        } else if (loadBtn) {
-            loadBtn.style.display = hasMore ? 'block' : 'none';
-        }
-    }
-
-    createCardInstance(product) {
-        const initialQty = (this._cartMapCache || {})[product.name] || 0;
-        const card = new ProductCard(product, this.storage, (name, newQty, delta) => this.onCardQuantityChange(name, newQty, delta), initialQty);
-        const cardElement = card.render();
-        // تتبع مجموع السلة مبدئياً
-        if (initialQty > 0) {
-            this._cartTotalQty += initialQty;
-            this._cartTotalPrice += initialQty * product.price;
-        }
-        const img = cardElement.querySelector('.product-img');
-        if (img) {
-            img.loading = 'lazy';
-            if (!img.complete) {
-                img.addEventListener('load', () => this.imageLoaded());
-                img.addEventListener('error', () => this.imageLoaded());
-            } else {
-                this.imageLoaded();
-            }
-        }
+        this.loadImage();
+        this.updateUI();
         return card;
     }
 
-    onCardQuantityChange(productName, newQty, delta) {
-        const cartMap = this.getCartMapFromStorage();
-        if (newQty === 0) delete cartMap[productName];
-        else cartMap[productName] = newQty;
-        this.saveCartMap(cartMap);
-        this._cartMapCache = cartMap;
+    loadImage() {
+        if (!this.imageElement) return;
+        const imageUrl = this.product.imageUrl;
 
-        // تحديث المجموع تزايدياً بدلاً من إعادة حساب كل الكروت
-        const product = this.cards.find(c => c.card.getProduct().name === productName)?.card.getProduct();
-        if (product) {
-            this._cartTotalQty += delta;
-            this._cartTotalPrice += delta * product.price;
+        if (!imageUrl || !imageUrl.startsWith('http')) {
+            this.setPlaceholderImage();
+            return;
         }
 
-        if (this.onGlobalQuantityChange) {
-            this.onGlobalQuantityChange(this._cartTotalQty, this._cartTotalPrice);
+        // الـ Service Worker يتكفّل بالكاش تلقائياً —
+        // نضع الـ src مباشرة والمتصفح يسترجعها من Cache API بعد أول زيارة
+        this.imageElement.src = imageUrl;
+        this.imageElement.onload  = () => this.imageElement.classList.add('loaded');
+        this.imageElement.onerror = () => {
+            this.setPlaceholderImage();
+            this.imageElement.classList.add('loaded'); // أظهر الـ placeholder أيضاً
+        };
+    }
+
+    setPlaceholderImage() {
+        if (this.imageElement) {
+            this.imageElement.src = 'https://via.placeholder.com/300?text=No+Image';
+            this.imageElement.classList.add('loaded');
         }
     }
 
-    getCartMapFromStorage() {
-        const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.CART);
-        return saved ? JSON.parse(saved) : {};
-    }
-
-    saveCartMap(map) {
-        localStorage.setItem(CONFIG.STORAGE_KEYS.CART, JSON.stringify(map));
-    }
-
-    setActiveMainCategory(cat) {
-        this.activeMain = cat;
-        this.activeSub = null;
-        this.visibleSectionsCount = 6;
-        this.buildAllSectionsList();
-        this.resetAllPages();
-        this.renderVisibleSections();
-    }
-
-    setActiveSubCategory(sub) {
-        this.activeSub = (sub === 'all') ? null : sub;
-        this.visibleSectionsCount = 6;
-        this.buildAllSectionsList();
-        this.resetAllPages();
-        this.renderVisibleSections();
-    }
-
-    filterBySearch(query) {
-        this.searchQuery = query;
-        if (query.trim() !== '') {
-            this.buildAllSectionsList();
-            this.visibleSectionsCount = this.allSectionsList.length;
+    updateUI() {
+        this.qtyInput.value = this.quantity;
+        if (this.quantity > 0) {
+            const subtotal = this.quantity * this.product.price;
+            this.subtotalSpan.innerText = subtotal.toLocaleString();
+            this.subtotalRow.style.display = 'block';
         } else {
-            this.visibleSectionsCount = 6;
-            this.buildAllSectionsList();
+            this.subtotalRow.style.display = 'none';
         }
-        this.resetAllPages();
-        this.renderVisibleSections();
-        // Count matching products synchronously before async render queue runs
-        if (!query.trim()) return 0;
-        const lowerQuery = query.toLowerCase();
-        let count = 0;
-        for (const { mainCat, subCat } of this.allSectionsList) {
-            const key = `${mainCat}|${subCat}`;
-            const products = this.productsMap.get(key) || [];
-            count += products.filter(p => p.name.toLowerCase().includes(lowerQuery)).length;
-        }
-        return count;
     }
 
-    resetAllPages() {
-        for (let key of this.currentPageMap.keys()) {
-            this.currentPageMap.set(key, 0);
-        }
-        this.loadMoreButtons.forEach(btn => btn.remove());
-        this.loadMoreButtons.clear();
-    }
-
-    clear() {
-        if (this.productsGridDiv) this.productsGridDiv.innerHTML = '';
-        this.cards = [];
-        this.mainCategories.clear();
-        this.subCategoriesMap.clear();
-        this.productsMap.clear();
-        this.currentPageMap.clear();
-        this.loadMoreButtons.clear();
-        this.totalImages = 0;
-        this.imagesLoaded = 0;
-        this.allSectionsList = [];
-        if (this.sectionsLoadMoreBtn) this.sectionsLoadMoreBtn.remove();
-        this.sectionsLoadMoreBtn = null;
-    }
-
-    getMainCategories() {
-        return Array.from(this.mainCategories);
-    }
-
-    getSubCategoriesFor(mainCat) {
-        return Array.from(this.subCategoriesMap.get(mainCat) || []);
-    }
-
-    getAllCartItems() {
-        const items = [];
-        for (let cardObj of this.cards) {
-            const qty = cardObj.card.getQuantity();
-            if (qty > 0) {
-                items.push({
-                    name: cardObj.card.getProduct().name,
-                    quantity: qty,
-                    price: cardObj.card.getProduct().price
-                });
+    changeQuantity(delta) {
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => {
+            const newVal = this.quantity + delta;
+            const maxStock = this.product.stock || 999;
+            if (newVal >= 0 && newVal <= maxStock) {
+                this.quantity = newVal;
+                this.updateUI();
+                this.element.classList.add('added');
+                setTimeout(() => this.element.classList.remove('added'), 300);
+                if (this.onQuantityChange) {
+                    this.onQuantityChange(this.product.name, this.quantity, delta);
+                }
             }
-        }
-        return items;
+            this.debounceTimer = null;
+        }, 150);
     }
 
-    removeItemFromCart(productName) {
-        const cardObj = this.cards.find(c => c.card.getProduct().name === productName);
-        if (cardObj && cardObj.card.getQuantity() > 0) {
-            cardObj.card.setQuantity(0);
-            return true;
-        }
-        return false;
+    getQuantity() {
+        return this.quantity;
     }
 
-    getTotalCartQuantity() {
-        let total = 0;
-        for (let cardObj of this.cards) total += cardObj.card.getQuantity();
-        return total;
+    setQuantity(qty) {
+        const newQty = Math.min(this.product.stock || 999, Math.max(0, qty));
+        const delta = newQty - this.quantity;
+        this.quantity = newQty;
+        this.updateUI();
+        if (delta !== 0 && this.onQuantityChange) {
+            this.onQuantityChange(this.product.name, this.quantity, delta);
+        }
+    }
+
+    getProduct() {
+        return this.product;
+    }
+}
+
+// ========== Video Modal (Singleton - Fullscreen + Swipe + Preload + Skeleton + Progress) ==========
+export class VideoModal {
+    static _el = null;
+    static _historyPushed = false;
+
+    static _playlist = [];
+    static _currentIndex = 0;
+
+    // متغيرات السحب
+    static _touchStartY = 0;
+    static _touchStartX = 0;
+    static _isDragging = false;
+    static _dragDeltaY = 0;
+
+    // preload: نحفظ blob URLs مؤقتاً { index -> objectURL }
+    static _preloadCache = new Map();
+    static _preloadControllers = new Map(); // AbortController لكل طلب
+
+    // ========== تسجيل الفيديوهات ==========
+    static setPlaylist(items) {
+        VideoModal._playlist = items;
+        // امسح الـ preload cache القديم عند تحميل بيانات جديدة
+        VideoModal._clearPreloadCache();
+    }
+
+    static _clearPreloadCache() {
+        VideoModal._preloadCache.forEach(url => {
+            try { URL.revokeObjectURL(url); } catch {}
+        });
+        VideoModal._preloadCache.clear();
+        VideoModal._preloadControllers.forEach(ctrl => {
+            try { ctrl.abort(); } catch {}
+        });
+        VideoModal._preloadControllers.clear();
+    }
+
+    // ========== Preload الفيديو التالي والسابق في الخلفية ==========
+    static _preloadAround(index) {
+        const targets = [index + 1, index - 1].filter(
+            i => i >= 0 && i < VideoModal._playlist.length && !VideoModal._preloadCache.has(i)
+        );
+        for (const i of targets) {
+            const url = VideoModal._playlist[i]?.url;
+            if (!url) continue;
+            // إلغاء طلب سابق لنفس الـ index لو موجود
+            VideoModal._preloadControllers.get(i)?.abort();
+            const ctrl = new AbortController();
+            VideoModal._preloadControllers.set(i, ctrl);
+            fetch(url, { signal: ctrl.signal })
+                .then(r => r.blob())
+                .then(blob => {
+                    if (ctrl.signal.aborted) return;
+                    const objUrl = URL.createObjectURL(blob);
+                    VideoModal._preloadCache.set(i, objUrl);
+                    VideoModal._preloadControllers.delete(i);
+                })
+                .catch(() => {}); // تجاهل الأخطاء (abort / شبكة)
+        }
+    }
+
+    // ========== بناء الـ DOM مرة واحدة ==========
+    static _build() {
+        if (document.getElementById('videoModal')) return;
+        const modal = document.createElement('div');
+        modal.id = 'videoModal';
+        modal.className = 'video-modal-overlay';
+        modal.innerHTML = `
+            <div class="video-modal-fullscreen" id="videoModalFullscreen">
+                <div class="video-modal-topbar">
+                    <button id="videoModalBack" class="video-modal-back" aria-label="رجوع">
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
+                    <span id="videoModalTitle" class="video-modal-title"></span>
+                    <span id="videoModalCounter" class="video-modal-counter"></span>
+                </div>
+                <div class="video-modal-body" id="videoModalBody">
+
+                    <!-- Skeleton shimmer يظهر ريثما يتحمّل الفيديو -->
+                    <div class="video-skeleton" id="videoSkeleton">
+                        <div class="video-skeleton-shimmer"></div>
+                        <div class="video-skeleton-icon"><i class="fas fa-film"></i></div>
+                    </div>
+
+                    <!-- Spinner + نسبة تحميل -->
+                    <div class="video-loader" id="videoLoader">
+                        <svg class="video-spinner" viewBox="0 0 44 44">
+                            <circle class="video-spinner-track" cx="22" cy="22" r="18" fill="none" stroke-width="3"/>
+                            <circle class="video-spinner-fill" id="videoSpinnerFill" cx="22" cy="22" r="18" fill="none" stroke-width="3"
+                                stroke-dasharray="113" stroke-dashoffset="113"/>
+                        </svg>
+                        <span class="video-loader-pct" id="videoLoaderPct">0%</span>
+                    </div>
+
+                    <video id="videoModalPlayer" class="video-player" playsinline></video>
+
+                    <!-- مؤشرات السحب -->
+                    <div class="swipe-hint swipe-hint-up" id="swipeHintUp">
+                        <i class="fas fa-chevron-up"></i>
+                        <span id="swipeHintUpTitle"></span>
+                    </div>
+                    <div class="swipe-hint swipe-hint-down" id="swipeHintDown">
+                        <i class="fas fa-chevron-down"></i>
+                        <span id="swipeHintDownTitle"></span>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        // أضف controls بعد الـ append لتجنّب مشكلة iOS مع autoplay
+        document.getElementById('videoModalPlayer').setAttribute('controls', '');
+
+        document.getElementById('videoModalBack').addEventListener('click', () => VideoModal.close());
+
+        document.addEventListener('keydown', (e) => {
+            if (!document.getElementById('videoModal')?.classList.contains('open')) return;
+            if (e.key === 'Escape')    VideoModal.close();
+            if (e.key === 'ArrowDown') VideoModal._goTo(VideoModal._currentIndex + 1);
+            if (e.key === 'ArrowUp')   VideoModal._goTo(VideoModal._currentIndex - 1);
+        });
+
+        window.addEventListener('popstate', () => {
+            if (VideoModal._historyPushed) {
+                VideoModal._historyPushed = false;
+                VideoModal.close(true);
+            }
+        });
+
+        // ========== أحداث الفيديو: skeleton / loader / play ==========
+        const player = document.getElementById('videoModalPlayer');
+
+        player.addEventListener('waiting',  () => VideoModal._showLoader());
+        player.addEventListener('stalled',  () => VideoModal._showLoader());
+        player.addEventListener('loadstart',() => VideoModal._showSkeleton());
+
+        player.addEventListener('canplay', () => {
+            VideoModal._hideSkeleton();
+            VideoModal._hideLoader();
+        });
+        player.addEventListener('playing', () => {
+            VideoModal._hideSkeleton();
+            VideoModal._hideLoader();
+        });
+
+        // تتبع نسبة التحميل عبر buffered
+        player.addEventListener('progress', () => VideoModal._updateProgress(player));
+        player.addEventListener('timeupdate', () => VideoModal._updateProgress(player));
+
+        // ========== Touch swipe ==========
+        const body = document.getElementById('videoModalBody');
+
+        body.addEventListener('touchstart', (e) => {
+            VideoModal._touchStartY = e.touches[0].clientY;
+            VideoModal._touchStartX = e.touches[0].clientX;
+            VideoModal._isDragging = true;
+            VideoModal._dragDeltaY = 0;
+        }, { passive: true });
+
+        body.addEventListener('touchmove', (e) => {
+            if (!VideoModal._isDragging) return;
+            const dy = e.touches[0].clientY - VideoModal._touchStartY;
+            const dx = e.touches[0].clientX - VideoModal._touchStartX;
+            if (Math.abs(dx) > Math.abs(dy)) return;
+            VideoModal._dragDeltaY = dy;
+            const fs = document.getElementById('videoModalFullscreen');
+            if (fs) fs.style.transform = `translateY(${dy * 0.18}px)`;
+            VideoModal._updateSwipeHints(dy);
+        }, { passive: true });
+
+        body.addEventListener('touchend', () => {
+            if (!VideoModal._isDragging) return;
+            VideoModal._isDragging = false;
+            const fs = document.getElementById('videoModalFullscreen');
+            if (fs) fs.style.transform = '';
+            const THRESHOLD = 80;
+            if      (VideoModal._dragDeltaY < -THRESHOLD) VideoModal._goTo(VideoModal._currentIndex + 1);
+            else if (VideoModal._dragDeltaY >  THRESHOLD) VideoModal._goTo(VideoModal._currentIndex - 1);
+            VideoModal._hideSwipeHints();
+            VideoModal._dragDeltaY = 0;
+        }, { passive: true });
+
+        VideoModal._el = modal;
+    }
+
+    // ========== Skeleton ==========
+    static _showSkeleton() {
+        const sk = document.getElementById('videoSkeleton');
+        const pl = document.getElementById('videoModalPlayer');
+        if (sk) sk.style.display = 'flex';
+        if (pl) pl.style.opacity = '0';
+        VideoModal._resetProgress();
+    }
+    static _hideSkeleton() {
+        const sk = document.getElementById('videoSkeleton');
+        const pl = document.getElementById('videoModalPlayer');
+        if (sk) sk.style.display = 'none';
+        if (pl) pl.style.opacity = '1';
+    }
+
+    // ========== Loader / Spinner ==========
+    static _showLoader() {
+        const ld = document.getElementById('videoLoader');
+        if (ld) ld.style.display = 'flex';
+    }
+    static _hideLoader() {
+        const ld = document.getElementById('videoLoader');
+        if (ld) ld.style.display = 'none';
+    }
+    static _resetProgress() {
+        const fill = document.getElementById('videoSpinnerFill');
+        const pct  = document.getElementById('videoLoaderPct');
+        if (fill) fill.style.strokeDashoffset = '113';
+        if (pct)  pct.textContent = '0%';
+        VideoModal._hideLoader();
+    }
+    static _updateProgress(player) {
+        if (!player.duration || player.duration === Infinity) return;
+        const buffered = player.buffered;
+        if (!buffered.length) return;
+        const loaded = buffered.end(buffered.length - 1) / player.duration;
+        const pctVal = Math.round(loaded * 100);
+        // أظهر الـ loader فقط إذا كان التحميل لسه ناقصاً
+        if (pctVal < 95) {
+            VideoModal._showLoader();
+            const CIRCUMFERENCE = 113;
+            const offset = CIRCUMFERENCE * (1 - loaded);
+            const fill = document.getElementById('videoSpinnerFill');
+            const pct  = document.getElementById('videoLoaderPct');
+            if (fill) fill.style.strokeDashoffset = offset.toString();
+            if (pct)  pct.textContent = `${pctVal}%`;
+        } else {
+            VideoModal._hideLoader();
+        }
+    }
+
+    // ========== Swipe hints ==========
+    static _updateSwipeHints(dy) {
+        const hintUp   = document.getElementById('swipeHintUp');
+        const hintDown = document.getElementById('swipeHintDown');
+        const SHOW_AFTER = 30;
+        if (!hintUp || !hintDown) return;
+        if (dy < -SHOW_AFTER) {
+            const next = VideoModal._playlist[VideoModal._currentIndex + 1];
+            hintUp.style.opacity = Math.min(1, (-dy - SHOW_AFTER) / 60).toString();
+            const t = document.getElementById('swipeHintUpTitle');
+            if (t) t.textContent = next ? next.title : '';
+            hintDown.style.opacity = '0';
+        } else if (dy > SHOW_AFTER) {
+            const prev = VideoModal._playlist[VideoModal._currentIndex - 1];
+            hintDown.style.opacity = Math.min(1, (dy - SHOW_AFTER) / 60).toString();
+            const t = document.getElementById('swipeHintDownTitle');
+            if (t) t.textContent = prev ? prev.title : '';
+            hintUp.style.opacity = '0';
+        } else {
+            VideoModal._hideSwipeHints();
+        }
+    }
+    static _hideSwipeHints() {
+        const hintUp   = document.getElementById('swipeHintUp');
+        const hintDown = document.getElementById('swipeHintDown');
+        if (hintUp)   hintUp.style.opacity   = '0';
+        if (hintDown) hintDown.style.opacity = '0';
+    }
+
+    // ========== التنقل ==========
+    static _goTo(index) {
+        const list = VideoModal._playlist;
+        if (index < 0 || index >= list.length) return;
+        VideoModal._currentIndex = index;
+        const item    = list[index];
+        const player  = document.getElementById('videoModalPlayer');
+        const titleEl = document.getElementById('videoModalTitle');
+        const counter = document.getElementById('videoModalCounter');
+
+        const fs = document.getElementById('videoModalFullscreen');
+        if (fs) {
+            fs.classList.add('video-transitioning');
+            setTimeout(() => fs.classList.remove('video-transitioning'), 320);
+        }
+
+        if (titleEl) titleEl.textContent = item.title;
+        if (counter) counter.textContent = `${index + 1} / ${list.length}`;
+
+        if (player) {
+            player.pause();
+            // استخدم blob URL المحمّل مسبقاً لو متاح
+            const cached = VideoModal._preloadCache.get(index);
+            player.src = cached || item.url;
+            player.load();
+            player.play().catch(() => {});
+        }
+
+        VideoModal._updateNavHints();
+        // حمّل الفيديوهات المجاورة في الخلفية
+        VideoModal._preloadAround(index);
+    }
+
+    static _updateNavHints() {
+        const hintUp   = document.getElementById('swipeHintUp');
+        const hintDown = document.getElementById('swipeHintDown');
+        const i   = VideoModal._currentIndex;
+        const len = VideoModal._playlist.length;
+        if (hintUp)   hintUp.style.display   = i < len - 1 ? 'flex' : 'none';
+        if (hintDown) hintDown.style.display = i > 0       ? 'flex' : 'none';
+        VideoModal._hideSwipeHints();
+    }
+
+    // ========== open / close ==========
+    static open(videoUrl, title = '', playlist = null) {
+        VideoModal._build();
+
+        if (playlist) VideoModal._playlist = playlist;
+
+        const idx = VideoModal._playlist.findIndex(v => v.url === videoUrl);
+        VideoModal._currentIndex = idx >= 0 ? idx : 0;
+
+        if (VideoModal._playlist.length === 0) {
+            VideoModal._playlist = [{ url: videoUrl, title }];
+            VideoModal._currentIndex = 0;
+        }
+
+        const modal   = document.getElementById('videoModal');
+        const player  = document.getElementById('videoModalPlayer');
+        const titleEl = document.getElementById('videoModalTitle');
+        const counter = document.getElementById('videoModalCounter');
+
+        if (titleEl) titleEl.textContent = title;
+        if (counter) counter.textContent = VideoModal._playlist.length > 1
+            ? `${VideoModal._currentIndex + 1} / ${VideoModal._playlist.length}`
+            : '';
+
+        VideoModal._showSkeleton();
+
+        const cached = VideoModal._preloadCache.get(VideoModal._currentIndex);
+        player.src = cached || videoUrl;
+        player.load();
+        modal.classList.add('open');
+
+        history.pushState({ videoModal: true }, '', location.href);
+        VideoModal._historyPushed = true;
+
+        player.play().catch(() => {});
+        document.body.style.overflow = 'hidden';
+        VideoModal._updateNavHints();
+        VideoModal._preloadAround(VideoModal._currentIndex);
+    }
+
+    static close(fromPopstate = false) {
+        const modal  = document.getElementById('videoModal');
+        const player = document.getElementById('videoModalPlayer');
+        if (!modal || !modal.classList.contains('open')) return;
+
+        modal.classList.remove('open');
+        if (player) { player.pause(); player.src = ''; }
+        VideoModal._hideSkeleton();
+        VideoModal._hideLoader();
+        document.body.style.overflow = '';
+
+        if (!fromPopstate && VideoModal._historyPushed) {
+            VideoModal._historyPushed = false;
+            history.back();
+        }
     }
 }
