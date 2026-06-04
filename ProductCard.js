@@ -197,9 +197,10 @@ export class ProductCard {
     }
 }
 
-// ========== Video Modal (Singleton) ==========
+// ========== Video Modal (Singleton - Fullscreen) ==========
 export class VideoModal {
     static _el = null;
+    static _historyPushed = false;
 
     static _build() {
         if (document.getElementById('videoModal')) return;
@@ -207,10 +208,13 @@ export class VideoModal {
         modal.id = 'videoModal';
         modal.className = 'video-modal-overlay';
         modal.innerHTML = `
-            <div class="video-modal-card">
-                <div class="video-modal-header">
+            <div class="video-modal-fullscreen">
+                <div class="video-modal-topbar">
+                    <button id="videoModalBack" class="video-modal-back" aria-label="رجوع">
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
                     <span id="videoModalTitle" class="video-modal-title"></span>
-                    <button id="videoModalClose" class="video-modal-close"><i class="fas fa-times"></i></button>
+                    <div class="video-modal-spacer"></div>
                 </div>
                 <div class="video-modal-body">
                     <video id="videoModalPlayer" class="video-player" controls playsinline></video>
@@ -219,15 +223,20 @@ export class VideoModal {
         `;
         document.body.appendChild(modal);
 
-        // إغلاق بالضغط على الخلفية أو زر الإغلاق
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) VideoModal.close();
-        });
-        document.getElementById('videoModalClose').addEventListener('click', () => VideoModal.close());
+        // زر الرجوع
+        document.getElementById('videoModalBack').addEventListener('click', () => VideoModal.close());
 
         // إغلاق بـ Escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') VideoModal.close();
+        });
+
+        // التعامل مع زر الرجوع في المتصفح / الجهاز
+        window.addEventListener('popstate', (e) => {
+            if (VideoModal._historyPushed) {
+                VideoModal._historyPushed = false;
+                VideoModal.close(true); // true = جاء من popstate، لا تدفع تاريخاً جديداً
+            }
         });
 
         VideoModal._el = modal;
@@ -235,27 +244,40 @@ export class VideoModal {
 
     static open(videoUrl, title = '') {
         VideoModal._build();
-        const modal  = document.getElementById('videoModal');
-        const player = document.getElementById('videoModalPlayer');
+        const modal   = document.getElementById('videoModal');
+        const player  = document.getElementById('videoModalPlayer');
         const titleEl = document.getElementById('videoModalTitle');
+
         if (titleEl) titleEl.textContent = title;
         player.src = videoUrl;
         player.load();
         modal.classList.add('open');
-        // تشغيل تلقائي بعد فتح الـ modal
-        player.play().catch(() => {}); // catch لو المتصفح منع autoplay
+
+        // أضف حالة في التاريخ حتى يشتغل زر الرجوع في الهاتف
+        history.pushState({ videoModal: true }, '', location.href);
+        VideoModal._historyPushed = true;
+
+        // تشغيل تلقائي
+        player.play().catch(() => {});
         document.body.style.overflow = 'hidden';
     }
 
-    static close() {
+    static close(fromPopstate = false) {
         const modal  = document.getElementById('videoModal');
         const player = document.getElementById('videoModalPlayer');
-        if (!modal) return;
+        if (!modal || !modal.classList.contains('open')) return;
+
         modal.classList.remove('open');
         if (player) {
             player.pause();
-            player.src = ''; // تحرير الموارد
+            player.src = '';
         }
         document.body.style.overflow = '';
+
+        // إذا أُغلق بدون popstate (بالضغط على زر الرجوع في الواجهة)، امسح الحالة من التاريخ
+        if (!fromPopstate && VideoModal._historyPushed) {
+            VideoModal._historyPushed = false;
+            history.back();
+        }
     }
 }
