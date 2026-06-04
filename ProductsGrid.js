@@ -66,8 +66,20 @@ export class ProductsGrid {
             }
             this.subCategoriesMap.set(mainCat, subSet);
         }
+        // بناء playlist لكل المنتجات التي عندها فيديو
+        this._buildVideoPlaylist();
         this.buildAllSectionsList();
         this.renderVisibleSections();
+    }
+
+    _buildVideoPlaylist() {
+        const playlist = [];
+        for (const products of this.productsMap.values()) {
+            for (const p of products) {
+                if (p.videoUrl) playlist.push({ url: p.videoUrl, title: p.name });
+            }
+        }
+        VideoModal.setPlaylist(playlist);
     }
 
     buildAllSectionsList() {
