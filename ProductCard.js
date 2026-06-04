@@ -197,12 +197,11 @@ export class ProductCard {
     }
 }
 
-// ========== Video Modal (Singleton - Fullscreen + Swipe Navigation) ==========
+// ========== Video Modal (Singleton - Fullscreen + Swipe + Preload + Skeleton + Progress) ==========
 export class VideoModal {
     static _el = null;
     static _historyPushed = false;
 
-    // قائمة كل الفيديوهات المتاحة { url, title }
     static _playlist = [];
     static _currentIndex = 0;
 
@@ -212,12 +211,53 @@ export class VideoModal {
     static _isDragging = false;
     static _dragDeltaY = 0;
 
-    // ========== تسجيل الفيديوهات من ProductsGrid ==========
+    // preload: نحفظ blob URLs مؤقتاً { index -> objectURL }
+    static _preloadCache = new Map();
+    static _preloadControllers = new Map(); // AbortController لكل طلب
+
+    // ========== تسجيل الفيديوهات ==========
     static setPlaylist(items) {
-        // items = [{ url, title }, ...]
         VideoModal._playlist = items;
+        // امسح الـ preload cache القديم عند تحميل بيانات جديدة
+        VideoModal._clearPreloadCache();
     }
 
+    static _clearPreloadCache() {
+        VideoModal._preloadCache.forEach(url => {
+            try { URL.revokeObjectURL(url); } catch {}
+        });
+        VideoModal._preloadCache.clear();
+        VideoModal._preloadControllers.forEach(ctrl => {
+            try { ctrl.abort(); } catch {}
+        });
+        VideoModal._preloadControllers.clear();
+    }
+
+    // ========== Preload الفيديو التالي والسابق في الخلفية ==========
+    static _preloadAround(index) {
+        const targets = [index + 1, index - 1].filter(
+            i => i >= 0 && i < VideoModal._playlist.length && !VideoModal._preloadCache.has(i)
+        );
+        for (const i of targets) {
+            const url = VideoModal._playlist[i]?.url;
+            if (!url) continue;
+            // إلغاء طلب سابق لنفس الـ index لو موجود
+            VideoModal._preloadControllers.get(i)?.abort();
+            const ctrl = new AbortController();
+            VideoModal._preloadControllers.set(i, ctrl);
+            fetch(url, { signal: ctrl.signal })
+                .then(r => r.blob())
+                .then(blob => {
+                    if (ctrl.signal.aborted) return;
+                    const objUrl = URL.createObjectURL(blob);
+                    VideoModal._preloadCache.set(i, objUrl);
+                    VideoModal._preloadControllers.delete(i);
+                })
+                .catch(() => {}); // تجاهل الأخطاء (abort / شبكة)
+        }
+    }
+
+    // ========== بناء الـ DOM مرة واحدة ==========
     static _build() {
         if (document.getElementById('videoModal')) return;
         const modal = document.createElement('div');
@@ -233,10 +273,27 @@ export class VideoModal {
                     <span id="videoModalCounter" class="video-modal-counter"></span>
                 </div>
                 <div class="video-modal-body" id="videoModalBody">
-                    <video id="videoModalPlayer" class="video-player" controls playsinline></video>
 
-                    <!-- مؤشر السحب -->
-                    <div class="swipe-hint swipe-hint-up"   id="swipeHintUp">
+                    <!-- Skeleton shimmer يظهر ريثما يتحمّل الفيديو -->
+                    <div class="video-skeleton" id="videoSkeleton">
+                        <div class="video-skeleton-shimmer"></div>
+                        <div class="video-skeleton-icon"><i class="fas fa-film"></i></div>
+                    </div>
+
+                    <!-- Spinner + نسبة تحميل -->
+                    <div class="video-loader" id="videoLoader">
+                        <svg class="video-spinner" viewBox="0 0 44 44">
+                            <circle class="video-spinner-track" cx="22" cy="22" r="18" fill="none" stroke-width="3"/>
+                            <circle class="video-spinner-fill" id="videoSpinnerFill" cx="22" cy="22" r="18" fill="none" stroke-width="3"
+                                stroke-dasharray="113" stroke-dashoffset="113"/>
+                        </svg>
+                        <span class="video-loader-pct" id="videoLoaderPct">0%</span>
+                    </div>
+
+                    <video id="videoModalPlayer" class="video-player" playsinline></video>
+
+                    <!-- مؤشرات السحب -->
+                    <div class="swipe-hint swipe-hint-up" id="swipeHintUp">
                         <i class="fas fa-chevron-up"></i>
                         <span id="swipeHintUpTitle"></span>
                     </div>
@@ -249,24 +306,44 @@ export class VideoModal {
         `;
         document.body.appendChild(modal);
 
-        // زر الرجوع
+        // أضف controls بعد الـ append لتجنّب مشكلة iOS مع autoplay
+        document.getElementById('videoModalPlayer').setAttribute('controls', '');
+
         document.getElementById('videoModalBack').addEventListener('click', () => VideoModal.close());
 
-        // Escape
         document.addEventListener('keydown', (e) => {
             if (!document.getElementById('videoModal')?.classList.contains('open')) return;
-            if (e.key === 'Escape')      VideoModal.close();
-            if (e.key === 'ArrowDown')   VideoModal._goTo(VideoModal._currentIndex + 1);
-            if (e.key === 'ArrowUp')     VideoModal._goTo(VideoModal._currentIndex - 1);
+            if (e.key === 'Escape')    VideoModal.close();
+            if (e.key === 'ArrowDown') VideoModal._goTo(VideoModal._currentIndex + 1);
+            if (e.key === 'ArrowUp')   VideoModal._goTo(VideoModal._currentIndex - 1);
         });
 
-        // زر الرجوع في المتصفح / الجهاز
         window.addEventListener('popstate', () => {
             if (VideoModal._historyPushed) {
                 VideoModal._historyPushed = false;
                 VideoModal.close(true);
             }
         });
+
+        // ========== أحداث الفيديو: skeleton / loader / play ==========
+        const player = document.getElementById('videoModalPlayer');
+
+        player.addEventListener('waiting',  () => VideoModal._showLoader());
+        player.addEventListener('stalled',  () => VideoModal._showLoader());
+        player.addEventListener('loadstart',() => VideoModal._showSkeleton());
+
+        player.addEventListener('canplay', () => {
+            VideoModal._hideSkeleton();
+            VideoModal._hideLoader();
+        });
+        player.addEventListener('playing', () => {
+            VideoModal._hideSkeleton();
+            VideoModal._hideLoader();
+        });
+
+        // تتبع نسبة التحميل عبر buffered
+        player.addEventListener('progress', () => VideoModal._updateProgress(player));
+        player.addEventListener('timeupdate', () => VideoModal._updateProgress(player));
 
         // ========== Touch swipe ==========
         const body = document.getElementById('videoModalBody');
@@ -282,13 +359,10 @@ export class VideoModal {
             if (!VideoModal._isDragging) return;
             const dy = e.touches[0].clientY - VideoModal._touchStartY;
             const dx = e.touches[0].clientX - VideoModal._touchStartX;
-            // تجاهل السحب الأفقي (للتحكم بالفيديو)
             if (Math.abs(dx) > Math.abs(dy)) return;
             VideoModal._dragDeltaY = dy;
-            // إضافة مقاومة بصرية خفيفة
             const fs = document.getElementById('videoModalFullscreen');
             if (fs) fs.style.transform = `translateY(${dy * 0.18}px)`;
-            // إظهار hint السحب
             VideoModal._updateSwipeHints(dy);
         }, { passive: true });
 
@@ -298,13 +372,8 @@ export class VideoModal {
             const fs = document.getElementById('videoModalFullscreen');
             if (fs) fs.style.transform = '';
             const THRESHOLD = 80;
-            if (VideoModal._dragDeltaY < -THRESHOLD) {
-                // سحب للأعلى = التالي
-                VideoModal._goTo(VideoModal._currentIndex + 1);
-            } else if (VideoModal._dragDeltaY > THRESHOLD) {
-                // سحب للأسفل = السابق
-                VideoModal._goTo(VideoModal._currentIndex - 1);
-            }
+            if      (VideoModal._dragDeltaY < -THRESHOLD) VideoModal._goTo(VideoModal._currentIndex + 1);
+            else if (VideoModal._dragDeltaY >  THRESHOLD) VideoModal._goTo(VideoModal._currentIndex - 1);
             VideoModal._hideSwipeHints();
             VideoModal._dragDeltaY = 0;
         }, { passive: true });
@@ -312,6 +381,58 @@ export class VideoModal {
         VideoModal._el = modal;
     }
 
+    // ========== Skeleton ==========
+    static _showSkeleton() {
+        const sk = document.getElementById('videoSkeleton');
+        const pl = document.getElementById('videoModalPlayer');
+        if (sk) sk.style.display = 'flex';
+        if (pl) pl.style.opacity = '0';
+        VideoModal._resetProgress();
+    }
+    static _hideSkeleton() {
+        const sk = document.getElementById('videoSkeleton');
+        const pl = document.getElementById('videoModalPlayer');
+        if (sk) sk.style.display = 'none';
+        if (pl) pl.style.opacity = '1';
+    }
+
+    // ========== Loader / Spinner ==========
+    static _showLoader() {
+        const ld = document.getElementById('videoLoader');
+        if (ld) ld.style.display = 'flex';
+    }
+    static _hideLoader() {
+        const ld = document.getElementById('videoLoader');
+        if (ld) ld.style.display = 'none';
+    }
+    static _resetProgress() {
+        const fill = document.getElementById('videoSpinnerFill');
+        const pct  = document.getElementById('videoLoaderPct');
+        if (fill) fill.style.strokeDashoffset = '113';
+        if (pct)  pct.textContent = '0%';
+        VideoModal._hideLoader();
+    }
+    static _updateProgress(player) {
+        if (!player.duration || player.duration === Infinity) return;
+        const buffered = player.buffered;
+        if (!buffered.length) return;
+        const loaded = buffered.end(buffered.length - 1) / player.duration;
+        const pctVal = Math.round(loaded * 100);
+        // أظهر الـ loader فقط إذا كان التحميل لسه ناقصاً
+        if (pctVal < 95) {
+            VideoModal._showLoader();
+            const CIRCUMFERENCE = 113;
+            const offset = CIRCUMFERENCE * (1 - loaded);
+            const fill = document.getElementById('videoSpinnerFill');
+            const pct  = document.getElementById('videoLoaderPct');
+            if (fill) fill.style.strokeDashoffset = offset.toString();
+            if (pct)  pct.textContent = `${pctVal}%`;
+        } else {
+            VideoModal._hideLoader();
+        }
+    }
+
+    // ========== Swipe hints ==========
     static _updateSwipeHints(dy) {
         const hintUp   = document.getElementById('swipeHintUp');
         const hintDown = document.getElementById('swipeHintDown');
@@ -333,7 +454,6 @@ export class VideoModal {
             VideoModal._hideSwipeHints();
         }
     }
-
     static _hideSwipeHints() {
         const hintUp   = document.getElementById('swipeHintUp');
         const hintDown = document.getElementById('swipeHintDown');
@@ -341,42 +461,46 @@ export class VideoModal {
         if (hintDown) hintDown.style.opacity = '0';
     }
 
+    // ========== التنقل ==========
     static _goTo(index) {
         const list = VideoModal._playlist;
         if (index < 0 || index >= list.length) return;
         VideoModal._currentIndex = index;
-        const item   = list[index];
-        const player = document.getElementById('videoModalPlayer');
+        const item    = list[index];
+        const player  = document.getElementById('videoModalPlayer');
         const titleEl = document.getElementById('videoModalTitle');
         const counter = document.getElementById('videoModalCounter');
 
-        // انيميشن انتقال
         const fs = document.getElementById('videoModalFullscreen');
         if (fs) {
             fs.classList.add('video-transitioning');
-            setTimeout(() => fs.classList.remove('video-transitioning'), 300);
+            setTimeout(() => fs.classList.remove('video-transitioning'), 320);
         }
 
         if (titleEl) titleEl.textContent = item.title;
         if (counter) counter.textContent = `${index + 1} / ${list.length}`;
+
         if (player) {
             player.pause();
-            player.src = item.url;
+            // استخدم blob URL المحمّل مسبقاً لو متاح
+            const cached = VideoModal._preloadCache.get(index);
+            player.src = cached || item.url;
             player.load();
             player.play().catch(() => {});
         }
+
         VideoModal._updateNavHints();
+        // حمّل الفيديوهات المجاورة في الخلفية
+        VideoModal._preloadAround(index);
     }
 
     static _updateNavHints() {
         const hintUp   = document.getElementById('swipeHintUp');
         const hintDown = document.getElementById('swipeHintDown');
-        const i = VideoModal._currentIndex;
+        const i   = VideoModal._currentIndex;
         const len = VideoModal._playlist.length;
-        // أخفِ مؤشرات الحدود
         if (hintUp)   hintUp.style.display   = i < len - 1 ? 'flex' : 'none';
         if (hintDown) hintDown.style.display = i > 0       ? 'flex' : 'none';
-        // إعادة opacity للصفر جاهزة للسحب التالي
         VideoModal._hideSwipeHints();
     }
 
@@ -384,14 +508,11 @@ export class VideoModal {
     static open(videoUrl, title = '', playlist = null) {
         VideoModal._build();
 
-        // إذا أُعطيت playlist جديدة استخدمها، وإلا ابحث في الـ playlist المسجّلة
         if (playlist) VideoModal._playlist = playlist;
 
-        // حدّد الـ index الحالي
         const idx = VideoModal._playlist.findIndex(v => v.url === videoUrl);
         VideoModal._currentIndex = idx >= 0 ? idx : 0;
 
-        // إذا لم تكن الـ playlist مسجّلة مسبقاً أضف هذا الفيديو منفرداً
         if (VideoModal._playlist.length === 0) {
             VideoModal._playlist = [{ url: videoUrl, title }];
             VideoModal._currentIndex = 0;
@@ -407,7 +528,10 @@ export class VideoModal {
             ? `${VideoModal._currentIndex + 1} / ${VideoModal._playlist.length}`
             : '';
 
-        player.src = videoUrl;
+        VideoModal._showSkeleton();
+
+        const cached = VideoModal._preloadCache.get(VideoModal._currentIndex);
+        player.src = cached || videoUrl;
         player.load();
         modal.classList.add('open');
 
@@ -417,6 +541,7 @@ export class VideoModal {
         player.play().catch(() => {});
         document.body.style.overflow = 'hidden';
         VideoModal._updateNavHints();
+        VideoModal._preloadAround(VideoModal._currentIndex);
     }
 
     static close(fromPopstate = false) {
@@ -426,6 +551,8 @@ export class VideoModal {
 
         modal.classList.remove('open');
         if (player) { player.pause(); player.src = ''; }
+        VideoModal._hideSkeleton();
+        VideoModal._hideLoader();
         document.body.style.overflow = '';
 
         if (!fromPopstate && VideoModal._historyPushed) {
