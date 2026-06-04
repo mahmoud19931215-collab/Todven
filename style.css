@@ -1155,46 +1155,71 @@ body {
     border-color: transparent;
 }
 
-/* ========== Video Modal ========== */
+/* ========== Video Modal (Fullscreen) ========== */
 .video-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.82);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: #000;
     z-index: 9000;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
+    flex-direction: column;
     visibility: hidden;
     opacity: 0;
-    transition: opacity 0.25s ease, visibility 0.25s ease;
+    transition: opacity 0.22s ease, visibility 0.22s ease;
 }
 .video-modal-overlay.open {
     visibility: visible;
     opacity: 1;
 }
-.video-modal-card {
-    background: #0d1117;
-    border-radius: 20px;
-    overflow: hidden;
+
+/* الحاوية الكاملة */
+.video-modal-fullscreen {
+    display: flex;
+    flex-direction: column;
     width: 100%;
-    max-width: 640px;
-    box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.07);
-    transform: scale(0.94) translateY(10px);
+    height: 100%;
+    background: #000;
+    transform: translateY(18px);
     transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.video-modal-overlay.open .video-modal-card {
-    transform: scale(1) translateY(0);
+.video-modal-overlay.open .video-modal-fullscreen {
+    transform: translateY(0);
 }
-.video-modal-header {
+
+/* شريط العنوان العلوي */
+.video-modal-topbar {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 14px 18px;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+    gap: 10px;
+    padding: 10px 14px;
+    padding-top: max(10px, env(safe-area-inset-top));
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    z-index: 2;
+    flex-shrink: 0;
 }
+
+/* زر الرجوع */
+.video-modal-back {
+    background: rgba(255,255,255,0.12);
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.15s;
+    flex-shrink: 0;
+}
+.video-modal-back:hover  { background: rgba(255,255,255,0.22); }
+.video-modal-back:active { transform: scale(0.9); }
+
 .video-modal-title {
     color: #ecf0f1;
     font-size: 15px;
@@ -1204,31 +1229,27 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    padding-left: 12px;
+    text-align: center;
 }
-.video-modal-close {
-    background: rgba(255,255,255,0.1);
-    border: none;
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    color: white;
-    font-size: 14px;
-    cursor: pointer;
+.video-modal-spacer {
+    width: 40px;   /* يوازن زر الرجوع ويمركز العنوان */
+    flex-shrink: 0;
+}
+
+/* منطقة الفيديو */
+.video-modal-body {
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s;
-    flex-shrink: 0;
-}
-.video-modal-close:hover { background: rgba(231,76,60,0.7); }
-.video-modal-body {
     background: #000;
-    line-height: 0;
+    overflow: hidden;
 }
 .video-player {
     width: 100%;
-    max-height: 70vh;
+    height: 100%;
+    max-height: 100%;
     display: block;
     outline: none;
+    object-fit: contain;
 }
